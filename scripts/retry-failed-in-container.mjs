@@ -1,0 +1,40 @@
+import { PrismaClient } from "@prisma/client";
+import { Queue } from "bullmq";
+import IORedis from "ioredis";
+
+const prisma = new PrismaClient();
+const connection = new IORedis(process.env.REDIS_URL ?? "redis://redis:6379", {
+  maxRetriesPerRequest: null,
+});
+
+const failedRuns = await prisma.analysisRun.findMany({
+  where: { status: "FAILED" },
+});
+
+console.log("failed", failedRuns.length);
+const queue = new Queue("repository-analysis", { connection });
+
+for (const failedRun of failedRuns) {
+  await prisma.analysisRun.update({
+    data: {
+      completedAt: null,
+      stage: "PARSING",
+      status: "QUEUED",
+    },
+    where: { id: failedRun.id },
+  });
+  await queue.add(
+    "static-analysis",
+    {
+      analysisRunId: failedRun.id,
+      organizationId: failedRun.organizationId,
+      repositoryId: failedRun.repositoryId,
+      snapshotId: failedRun.snapshotId,
+    },
+    { jobId: `${failedRun.id}-retry-${Date.now()}` },
+  );
+  console.log("requeued", failedRun.id);
+}
+
+await prisma.$disconnect();
+await connection.quit();

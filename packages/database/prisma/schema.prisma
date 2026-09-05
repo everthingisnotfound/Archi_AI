@@ -1,0 +1,454 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  ANALYST
+  DEVELOPER
+  VIEWER
+}
+
+enum RepositorySourceType {
+  GITHUB
+  ZIP
+  FOLDER
+  WEBSITE
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum AnalysisRunStage {
+  PARSING
+  GRAPHING
+  EMBEDDING
+  SCORING
+  DOCUMENTING
+  COMPLETED
+  FAILED
+}
+
+enum DiagramType {
+  DEPENDENCY_GRAPH
+  CLASS_DIAGRAM
+  SEQUENCE_DIAGRAM
+  DATABASE_DIAGRAM
+  REST_API_DIAGRAM
+  CALL_GRAPH
+  FOLDER_STRUCTURE
+}
+
+enum FindingSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FindingCategory {
+  SECURITY
+  QUALITY
+  PERFORMANCE
+  MAINTAINABILITY
+  DEPENDENCY
+  DUPLICATION
+  DEAD_CODE
+}
+
+enum DocumentType {
+  README
+  API
+  ARCHITECTURE
+  ONBOARDING
+  DEPLOYMENT
+  TESTING
+  MODULE
+  DEEP_DIVE
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model Organization {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(160)
+  slug        String       @unique @db.VarChar(180)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  auditEvents AuditEvent[]
+  memberships Membership[]
+  repositories Repository[]
+  users       User[]       @relation("OrganizationCreatedBy")
+
+  @@index([slug])
+}
+
+model User {
+  id                     String       @id @default(uuid()) @db.Uuid
+  email                  String       @unique @db.VarChar(320)
+  name                   String       @db.VarChar(120)
+  passwordHash           String       @db.VarChar(512)
+  createdOrganizationId  String?      @db.Uuid
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  auditEvents            AuditEvent[]
+  chatMessages           ChatMessage[]
+  createdOrganization    Organization? @relation("OrganizationCreatedBy", fields: [createdOrganizationId], references: [id], onDelete: SetNull)
+  memberships            Membership[]
+  sessions               Session[]
+
+  @@index([email])
+}
+
+model Membership {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  userId         String         @db.Uuid
+  role           MembershipRole
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId, role])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique @db.VarChar(128)
+  userAgent String?  @db.VarChar(512)
+  ipAddress String?  @db.VarChar(128)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Repository {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @db.Uuid
+  name           String               @db.VarChar(180)
+  defaultBranch  String?              @db.VarChar(180)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  analysisRuns   AnalysisRun[]
+  chatSessions   ChatSession[]
+  diagrams       Diagram[]
+  documents      Document[]
+  findings       Finding[]
+  ingestionJobs  IngestionJob[]
+  metrics        Metric[]
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  snapshots      RepositorySnapshot[]
+  sources        RepositorySource[]
+
+  @@index([organizationId])
+  @@unique([organizationId, name])
+}
+
+model RepositorySource {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @db.Uuid
+  repositoryId   String               @db.Uuid
+  type           RepositorySourceType
+  uri            String?              @db.VarChar(2048)
+  metadata       Json                 @default("{}")
+  createdAt      DateTime             @default(now())
+  ingestionJobs  IngestionJob[]
+  repository     Repository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId])
+}
+
+model RepositorySnapshot {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  repositoryId   String           @db.Uuid
+  commitSha      String?          @db.VarChar(80)
+  contentHash    String           @db.VarChar(128)
+  createdAt      DateTime         @default(now())
+  analysisRuns   AnalysisRun[]
+  chunks         CodeChunk[]
+  dependencyEdges DependencyEdge[]
+  diagrams       Diagram[]
+  documents      Document[]
+  fileNodes      FileNode[]
+  findings       Finding[]
+  metrics        Metric[]
+  repository     Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  symbols        Symbol[]
+
+  @@index([organizationId])
+  @@index([repositoryId])
+  @@unique([repositoryId, contentHash])
+}
+
+model IngestionJob {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  repositoryId   String           @db.Uuid
+  sourceId       String           @db.Uuid
+  status         JobStatus        @default(QUEUED)
+  progress       Int              @default(0)
+  failureCode    String?          @db.VarChar(80)
+  failureMessage String?          @db.VarChar(500)
+  result         Json?
+  createdAt      DateTime         @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  repository     Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  source         RepositorySource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId])
+  @@index([status])
+}
+
+model AnalysisRun {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  stage          AnalysisRunStage
+  status         JobStatus          @default(QUEUED)
+  promptVersion  String?            @db.VarChar(80)
+  modelMetadata  Json?
+  createdAt      DateTime           @default(now())
+  completedAt    DateTime?
+  repository     Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@index([status])
+}
+
+model FileNode {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  path           String             @db.VarChar(512)
+  language       String?            @db.VarChar(80)
+  sizeBytes      Int
+  contentHash    String             @db.VarChar(128)
+  createdAt      DateTime           @default(now())
+  chunks         CodeChunk[]
+  findings       Finding[]
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  symbols        Symbol[]
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@unique([snapshotId, path])
+}
+
+model Symbol {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  fileNodeId     String             @db.Uuid
+  name           String             @db.VarChar(240)
+  kind           String             @db.VarChar(80)
+  startLine      Int
+  endLine        Int
+  metadata       Json               @default("{}")
+  chunks         CodeChunk[]
+  fileNode       FileNode           @relation(fields: [fileNodeId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@index([fileNodeId])
+}
+
+model DependencyEdge {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  sourceRef      String             @db.VarChar(512)
+  targetRef      String             @db.VarChar(512)
+  edgeType       String             @db.VarChar(80)
+  metadata       Json               @default("{}")
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@index([edgeType])
+}
+
+model CodeChunk {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  fileNodeId     String             @db.Uuid
+  symbolId       String?            @db.Uuid
+  contentHash    String             @db.VarChar(128)
+  startLine      Int
+  endLine        Int
+  text           String
+  embedding      Unsupported("vector(1536)")?
+  metadata       Json               @default("{}")
+  fileNode       FileNode           @relation(fields: [fileNodeId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  symbol         Symbol?            @relation(fields: [symbolId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@index([fileNodeId])
+  @@unique([snapshotId, fileNodeId, contentHash, startLine, endLine])
+}
+
+model Diagram {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  type           DiagramType
+  title          String             @db.VarChar(240)
+  graphJson      Json
+  mermaidSource  String?
+  createdAt      DateTime           @default(now())
+  repository     Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId, type])
+}
+
+model Finding {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  fileNodeId     String?            @db.Uuid
+  severity       FindingSeverity
+  category       FindingCategory
+  title          String             @db.VarChar(240)
+  description    String
+  startLine      Int?
+  endLine        Int?
+  metadata       Json               @default("{}")
+  createdAt      DateTime           @default(now())
+  fileNode       FileNode?          @relation(fields: [fileNodeId], references: [id], onDelete: SetNull)
+  repository     Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@index([severity, category])
+}
+
+model Metric {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  key            String             @db.VarChar(120)
+  score          Decimal            @db.Decimal(8, 3)
+  metadata       Json               @default("{}")
+  createdAt      DateTime           @default(now())
+  repository     Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId])
+  @@unique([snapshotId, key])
+}
+
+model Document {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  repositoryId   String             @db.Uuid
+  snapshotId     String             @db.Uuid
+  type           DocumentType
+  title          String             @db.VarChar(240)
+  contentMarkdown String
+  provenance     Json               @default("{}")
+  promptVersion  String?            @db.VarChar(80)
+  modelMetadata  Json?
+  createdAt      DateTime           @default(now())
+  repository     Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot       RepositorySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, snapshotId, type])
+}
+
+model ChatSession {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  repositoryId   String        @db.Uuid
+  title          String?       @db.VarChar(180)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  messages       ChatMessage[]
+  repository     Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([repositoryId, updatedAt])
+}
+
+model ChatMessage {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @db.Uuid
+  sessionId      String      @db.Uuid
+  userId         String?     @db.Uuid
+  role           ChatRole
+  content        String
+  provenance     Json        @default("{}")
+  modelMetadata  Json?
+  createdAt      DateTime    @default(now())
+  session        ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([sessionId, createdAt])
+}
+
+model AuditEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String?      @db.Uuid
+  userId         String?      @db.Uuid
+  action         String       @db.VarChar(160)
+  resourceType   String       @db.VarChar(120)
+  resourceId     String?      @db.VarChar(120)
+  ipAddress      String?      @db.VarChar(128)
+  userAgent      String?      @db.VarChar(512)
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+

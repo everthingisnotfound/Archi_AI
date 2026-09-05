@@ -20,6 +20,7 @@ import { DependencyGraphPanel } from "../components/DependencyGraphPanel.js";
 import { PipelinePanel } from "../components/PipelinePanel.js";
 import { SecurityFindingCard } from "../components/SecurityFindingCard.js";
 import { ThreatScorePanel } from "../components/ThreatScorePanel.js";
+import { ThreatBriefingCards } from "../components/ThreatBriefingCards.js";
 
 type ShellContext = {
   me?: Omit<AuthResponse, "organization">;
@@ -382,9 +383,7 @@ export function RepositoryDetailPage(): React.JSX.Element {
           <p className="mt-3 text-sm text-rose-200">{deepAnalysisMutation.error.message}</p>
         ) : null}
         {deepDocument ? (
-          <pre className="mt-4 max-h-[40rem] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
-            {deepDocument.contentMarkdown}
-          </pre>
+          <ThreatBriefingCards className="mt-4" content={deepDocument.contentMarkdown} />
         ) : (
           <p className="mt-4 text-sm text-slate-500">
             {deepAnalysisMutation.isPending || deepQueuedAt

@@ -1,6 +1,8 @@
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { BlendFunction } from "postprocessing";
 import * as THREE from "three";
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
@@ -312,6 +314,16 @@ export function PipelineScene({ activeStage = null }: PipelineSceneProps): React
           );
         })}
       </group>
+
+      <EffectComposer>
+        <Bloom
+          blendFunction={BlendFunction.ADD}
+          intensity={1.5}
+          luminanceThreshold={0.1}
+          luminanceSmoothing={0.9}
+          mipmapBlur
+        />
+      </EffectComposer>
     </>
   );
 }

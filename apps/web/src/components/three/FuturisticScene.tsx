@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { BlendFunction } from "postprocessing";
 import { cn } from "@ai-archaeologist/ui";
 import { CyberBackdrop } from "../cyber/CyberBackdrop.js";
 import { SceneContent } from "./SceneContent.js";
@@ -30,6 +32,15 @@ export function FuturisticScene({
       >
         <Suspense fallback={null}>
           <SceneContent variant={variant} />
+          <EffectComposer>
+            <Bloom
+              blendFunction={BlendFunction.ADD}
+              intensity={variant === "hero" ? 1.2 : 0.8}
+              luminanceThreshold={0.15}
+              luminanceSmoothing={0.85}
+              mipmapBlur
+            />
+          </EffectComposer>
         </Suspense>
       </Canvas>
     </div>

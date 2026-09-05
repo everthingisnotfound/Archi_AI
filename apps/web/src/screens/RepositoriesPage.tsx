@@ -2,8 +2,9 @@ import { type ChangeEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { FileArchive, FolderUp, GitBranch, Globe, Loader2, Plus, ShieldAlert } from "lucide-react";
-import { Link, Navigate, useNavigate, useOutletContext } from "react-router-dom";
+import { Navigate, useNavigate, useOutletContext } from "react-router-dom";
 import { Badge, Button, Input } from "@ai-archaeologist/ui";
+import { RepositoryRadarCard } from "../components/RepositoryRadarCard.js";
 import type { AuthResponse } from "../api/schemas.js";
 import {
   createFolderRepository,
@@ -238,38 +239,27 @@ export function RepositoriesPage(): React.JSX.Element {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-cyan-400/15 bg-white/[0.03] backdrop-blur-sm">
-        <div className="grid grid-cols-[1fr_150px_170px] border-b border-cyan-400/10 px-4 py-3 text-xs uppercase tracking-wide text-slate-500">
-          <span>Name</span>
-          <span>Branch</span>
-          <span>Created</span>
-        </div>
-        <div className="divide-y divide-cyan-400/10">
-          {repositoriesQuery.data?.items.map((repository, index) => (
-            <motion.div
-              animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-[1fr_150px_170px] items-center px-4 py-3 text-sm"
-              initial={{ opacity: 0, y: 8 }}
-              key={repository.id}
-              transition={{ delay: index * 0.03 }}
-            >
-              <span className="truncate font-medium text-white">
-                <Link className="transition hover:text-cyan-300" to={`/repositories/${repository.id}`}>
-                  {repository.name}
-                </Link>
-              </span>
-              <span className="text-slate-400">{repository.defaultBranch ?? "pending"}</span>
-              <span className="text-slate-500">
-                {new Date(repository.createdAt).toLocaleDateString()}
-              </span>
-            </motion.div>
-          ))}
-          {repositoriesQuery.data?.items.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-slate-500">
-              No repositories have been added.
-            </div>
-          ) : null}
-        </div>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {repositoriesQuery.data?.items.map((repository, index) => (
+          <motion.div
+            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 16 }}
+            key={repository.id}
+            transition={{ delay: index * 0.05 }}
+          >
+            <RepositoryRadarCard
+              branch={repository.defaultBranch}
+              createdAt={repository.createdAt}
+              id={repository.id}
+              name={repository.name}
+            />
+          </motion.div>
+        ))}
+        {repositoriesQuery.data?.items.length === 0 ? (
+          <div className="col-span-full px-4 py-16 text-center text-sm text-slate-500">
+            No repositories have been added.
+          </div>
+        ) : null}
       </section>
     </div>
   );

@@ -38,14 +38,18 @@
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^9.30.1",
+    "cross-env": "^7.0.3",
     "eslint": "^9.30.1",
     "husky": "^9.1.7",
-    "cross-env": "^7.0.3",
     "prettier": "^3.6.2",
     "prisma": "^6.11.1",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.1",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@react-three/postprocessing": "^3.1.1",
+    "postprocessing": "^6.39.4"
   }
 }

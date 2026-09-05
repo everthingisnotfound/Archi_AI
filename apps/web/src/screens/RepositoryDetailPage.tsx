@@ -17,6 +17,7 @@ import {
 } from "../api/repositories.js";
 import { RepositoryChatPanel } from "../components/RepositoryChatPanel.js";
 import { DependencyGraphPanel } from "../components/DependencyGraphPanel.js";
+import { PipelinePanel } from "../components/PipelinePanel.js";
 import { SecurityFindingCard } from "../components/SecurityFindingCard.js";
 import { ThreatScorePanel } from "../components/ThreatScorePanel.js";
 
@@ -196,7 +197,7 @@ export function RepositoryDetailPage(): React.JSX.Element {
               variant="neon"
             >
               <ScanSearch aria-hidden="true" size={16} />
-              {deepDocument ? "Regenerate deeper analysis" : "Deeper analysis"}
+              {deepDocument ? "Regenerate briefing" : "Threat briefing"}
             </Button>
           ) : null}
           {repositoryQuery.isFetching || jobQuery.isFetching ? (
@@ -370,10 +371,10 @@ export function RepositoryDetailPage(): React.JSX.Element {
       <section className="rounded-md border border-slate-800 bg-panel p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-sm font-medium text-white">Deeper analysis</h2>
+            <h2 className="text-sm font-medium text-white">Threat Intelligence Briefing</h2>
             <p className="mt-1 text-xs text-slate-500">
-              AI briefing: project explanation, each observed dependency, and how security controls
-              on this snapshot actually work — plus what is missing.
+              Adversarial analysis: attack surface, competitive exposure, threat scenarios, and a
+              hardening roadmap — all grounded in the observed snapshot, nothing invented.
             </p>
           </div>
         </div>
@@ -381,14 +382,14 @@ export function RepositoryDetailPage(): React.JSX.Element {
           <p className="mt-3 text-sm text-rose-200">{deepAnalysisMutation.error.message}</p>
         ) : null}
         {deepDocument ? (
-          <pre className="mt-4 max-h-[32rem] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+          <pre className="mt-4 max-h-[40rem] overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
             {deepDocument.contentMarkdown}
           </pre>
         ) : (
           <p className="mt-4 text-sm text-slate-500">
             {deepAnalysisMutation.isPending || deepQueuedAt
-              ? "Deeper analysis is running. This section will fill in when Groq finishes."
-              : "Run Deeper analysis after the snapshot completes. It uses only captured pages, headers, scripts, and findings — it will not invent hidden backend internals."}
+              ? "Threat briefing is running. Grounding this in the snapshot now."
+              : "Run the Threat briefing after enrichment completes. It consumes only observed files, symbols, dependencies, and findings — no invented controls or runtime secrets."}
           </p>
         )}
       </section>
@@ -434,6 +435,10 @@ export function RepositoryDetailPage(): React.JSX.Element {
           </div>
         ) : null}
       </section>
+
+      <PipelinePanel
+        repositoryName={repositoryQuery.data?.repository.name}
+      />
     </div>
   );
 }

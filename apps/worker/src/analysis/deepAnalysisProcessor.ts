@@ -13,7 +13,7 @@ export function createDeepAnalysisProcessor(dependencies: {
   return async (job: Job<unknown>): Promise<void> => {
     const payload = deepAnalysisJobPayloadSchema.parse(job.data);
 
-    const [repository, snapshot, findings, diagram, chunks] = await Promise.all([
+    const [repository, snapshot, findings, diagram, chunks, symbols, files, ingestion] = await Promise.all([
       dependencies.prisma.repository.findUnique({ where: { id: payload.repositoryId } }),
       dependencies.prisma.repositorySnapshot.findFirst({
         where: { id: payload.snapshotId, repositoryId: payload.repositoryId },
@@ -27,8 +27,20 @@ export function createDeepAnalysisProcessor(dependencies: {
       }),
       dependencies.prisma.codeChunk.findMany({
         include: { fileNode: { select: { path: true } } },
-        take: 8,
+        take: 10,
         where: { snapshotId: payload.snapshotId },
+      }),
+      dependencies.prisma.symbol.findMany({
+        include: { fileNode: { select: { path: true } } },
+        take: 30,
+        where: { snapshotId: payload.snapshotId },
+      }),
+      dependencies.prisma.fileNode.findMany({
+        where: { snapshotId: payload.snapshotId },
+      }),
+      dependencies.prisma.ingestionJob.findFirst({
+        orderBy: { createdAt: "desc" },
+        where: { repositoryId: payload.repositoryId, status: "SUCCEEDED" },
       }),
     ]);
 
@@ -39,30 +51,50 @@ export function createDeepAnalysisProcessor(dependencies: {
     const graphJson = (diagram?.graphJson ?? {}) as {
       edges?: Array<{ source?: string; target?: string; type?: string }>;
     };
-    const ingestion = await dependencies.prisma.ingestionJob.findFirst({
-      orderBy: { createdAt: "desc" },
-      where: { repositoryId: payload.repositoryId, status: "SUCCEEDED" },
-    });
     const ingestionResult = ingestion?.result as
       | { languages?: string[]; technologies?: string[] }
       | undefined;
+
+    // Load site profile JSON from the workspace if it exists
+    let siteProfile = "";
+    try {
+      const { readFile } = await import("node:fs/promises");
+      const profilePath = `${dependencies.config.WORKSPACE_ROOT}/snapshots/${payload.snapshotId}/repo/_archaeologist/site-profile.json`;
+      siteProfile = await readFile(profilePath, "utf-8");
+    } catch {
+      // Site profile only exists for WEBSITE source types
+      siteProfile = "";
+    }
 
     const result = await runDeepAnalysis(dependencies.config, payload, {
       contextExcerpt: chunks
         .map((chunk) => `### ${chunk.fileNode.path}\n${chunk.text.slice(0, 900)}`)
         .join("\n\n"),
+      dependencyEdges: (graphJson.edges ?? []).map((edge) => ({
+        source: edge.source ?? "",
+        target: edge.target ?? "",
+        type: edge.type ?? "edge",
+      })),
+      files: files.slice(0, 200).map((file) => ({
+        language: file.language,
+        path: file.path,
+        size_bytes: file.sizeBytes,
+      })),
       findings: findings.map((finding) => ({
         description: finding.description,
         severity: finding.severity,
         title: finding.title,
       })),
-      graphEdges: (graphJson.edges ?? []).map((edge) => ({
-        source: edge.source ?? "",
-        target: edge.target ?? "",
-        type: edge.type ?? "edge",
-      })),
       languages: ingestionResult?.languages ?? [],
       repositoryName: repository.name,
+      siteProfile,
+      symbols: symbols.map((sym) => ({
+        endLine: sym.endLine,
+        kind: sym.kind,
+        name: sym.name,
+        path: sym.fileNode.path,
+        startLine: sym.startLine,
+      })),
       technologies: ingestionResult?.technologies ?? [],
     });
 
@@ -81,17 +113,17 @@ export function createDeepAnalysisProcessor(dependencies: {
           promptTokens: result.prompt_tokens,
         },
         organizationId: payload.organizationId,
-        provenance: { kind: "deep-analysis" },
+        provenance: { kind: "threat-briefing" },
         repositoryId: payload.repositoryId,
         snapshotId: payload.snapshotId,
-        title: "Deeper analysis",
+        title: "Threat Intelligence Briefing",
         type: "DEEP_DIVE",
       },
     });
 
     dependencies.logger.info(
       { snapshotId: payload.snapshotId, model: result.model },
-      "deep analysis document stored",
+      "threat briefing document stored",
     );
   };
 }

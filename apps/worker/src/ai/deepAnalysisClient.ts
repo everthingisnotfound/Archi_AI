@@ -8,16 +8,33 @@ export type DeepAnalysisResult = {
   prompt_tokens: number;
 };
 
+export type DeepAnalysisSymbol = {
+  name: string;
+  kind: string;
+  path: string;
+  startLine: number;
+  endLine: number;
+};
+
+export type DeepAnalysisFile = {
+  language: string | null;
+  path: string;
+  size_bytes: number;
+};
+
 export async function runDeepAnalysis(
   config: WorkerConfig,
   payload: DeepAnalysisJobPayload,
   input: {
     contextExcerpt: string;
     findings: Array<{ description: string; severity: string; title: string }>;
-    graphEdges: Array<{ source: string; target: string; type: string }>;
+    dependencyEdges: Array<{ source: string; target: string; type: string }>;
     languages: string[];
     repositoryName: string;
+    siteProfile: string;
+    symbols: DeepAnalysisSymbol[];
     technologies: string[];
+    files: DeepAnalysisFile[];
   },
 ): Promise<DeepAnalysisResult> {
   const token = signInternalJobToken(`${payload.snapshotId}-deep`, config.INTERNAL_JOB_TOKEN_SECRET);
@@ -25,13 +42,16 @@ export async function runDeepAnalysis(
     body: JSON.stringify({
       analysisRunId: payload.analysisRunId,
       contextExcerpt: input.contextExcerpt,
+      dependencyEdges: input.dependencyEdges,
+      files: input.files,
       findings: input.findings,
-      graphEdges: input.graphEdges,
       languages: input.languages,
       organizationId: payload.organizationId,
       repositoryId: payload.repositoryId,
       repositoryName: input.repositoryName,
+      siteProfile: input.siteProfile,
       snapshotId: payload.snapshotId,
+      symbols: input.symbols,
       technologies: input.technologies,
     }),
     headers: {

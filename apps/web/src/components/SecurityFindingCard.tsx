@@ -1,16 +1,20 @@
-import { Badge } from "@ai-archaeologist/ui";
+import { motion } from "framer-motion";
 import type { z } from "zod";
 import type { findingSchema } from "../api/schemas.js";
 
 type Finding = z.infer<typeof findingSchema>;
 
-const SEVERITY_VARIANT: Record<string, "neutral" | "cyan"> = {
-  CRITICAL: "neutral",
-  HIGH: "neutral",
-  MEDIUM: "cyan",
-  LOW: "cyan",
-  INFO: "cyan",
+type SeverityConfig = { color: string; bgColor: string; borderColor: string; glowColor: string };
+
+const SEVERITY_CONFIG: Record<string, SeverityConfig> = {
+  CRITICAL: { color: "text-rose-300", bgColor: "bg-rose-500/10", borderColor: "border-rose-500/30", glowColor: "rgba(244, 63, 94, 0.3)" },
+  HIGH: { color: "text-amber-300", bgColor: "bg-amber-500/10", borderColor: "border-amber-500/30", glowColor: "rgba(251, 191, 36, 0.3)" },
+  MEDIUM: { color: "text-orange-300", bgColor: "bg-orange-500/10", borderColor: "border-orange-500/30", glowColor: "rgba(251, 146, 60, 0.3)" },
+  LOW: { color: "text-cyan-300", bgColor: "bg-cyan-500/10", borderColor: "border-cyan-500/30", glowColor: "rgba(34, 211, 238, 0.3)" },
+  INFO: { color: "text-violet-300", bgColor: "bg-violet-500/10", borderColor: "border-violet-500/30", glowColor: "rgba(167, 139, 250, 0.3)" },
 };
+
+const DEFAULT_CONFIG: SeverityConfig = { color: "text-slate-300", bgColor: "bg-slate-500/10", borderColor: "border-slate-500/30", glowColor: "rgba(148, 163, 184, 0.3)" };
 
 const DEFAULT_GUIDANCE: Record<string, { risk: string; remediation: string }> = {
   "Private key material in source": {
@@ -41,36 +45,96 @@ export function SecurityFindingCard({ finding }: { finding: Finding }): React.JS
       ? `${finding.filePath}:${finding.startLine}`
       : finding.filePath ?? null;
 
+  const severityConfig = SEVERITY_CONFIG[finding.severity] ?? DEFAULT_CONFIG;
+
   return (
-    <div className="rounded-md border border-slate-800 bg-slate-950 px-3 py-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={SEVERITY_VARIANT[finding.severity] ?? "cyan"}>{finding.severity}</Badge>
-        <span className="font-medium text-white">{finding.title}</span>
-        {location ? <span className="text-xs text-slate-500">{location}</span> : null}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.01 }}
+      className="group relative overflow-hidden rounded-lg border p-4 text-sm transition-all duration-300"
+      style={{
+        backgroundColor: `${severityConfig.glowColor.replace('0.3', '0.05')}`,
+        borderColor: severityConfig.borderColor,
+        boxShadow: `0 0 15px ${severityConfig.glowColor}`,
+      }}
+    >
+      {/* Left accent bar */}
+      <div
+        className="absolute left-0 top-0 h-full w-1"
+        style={{ backgroundColor: severityConfig.glowColor }}
+      />
+
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Severity badge with glow */}
+        <div
+          className={`relative rounded-md px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${severityConfig.color} ${severityConfig.bgColor}`}
+          style={{
+            textShadow: `0 0 10px ${severityConfig.glowColor}`,
+          }}
+        >
+          <span className="relative">{finding.severity}</span>
+        </div>
+
+        {/* Title */}
+        <span className={`font-semibold ${severityConfig.color}`}>{finding.title}</span>
+
+        {/* Location */}
+        {location && (
+          <span className="ml-auto font-mono text-xs text-slate-500">{location}</span>
+        )}
       </div>
 
-      <div className="mt-3 space-y-2 text-slate-300">
+      {/* Content */}
+      <div className="mt-4 space-y-3">
+        {/* Detected pattern */}
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Detected</p>
-          <pre className="mt-1 overflow-x-auto rounded bg-slate-900 px-2 py-1 text-xs text-slate-300">
+          <p className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-slate-500">
+            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+            </svg>
+            Detected Pattern
+          </p>
+          <pre className="overflow-x-auto rounded-md bg-slate-900/80 px-3 py-2 font-mono text-xs leading-relaxed text-slate-300">
             {finding.description}
           </pre>
         </div>
 
-        {riskExplanation ? (
+        {/* Risk explanation */}
+        {riskExplanation && (
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Why it matters</p>
-            <p className="mt-1 leading-6 text-slate-400">{riskExplanation}</p>
+            <p className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-slate-500">
+              <svg className="h-3 w-3 text-amber-400/70" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              Risk Assessment
+            </p>
+            <p className="leading-relaxed text-slate-400">{riskExplanation}</p>
           </div>
-        ) : null}
+        )}
 
-        {remediation ? (
+        {/* Remediation */}
+        {remediation && (
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Recommended fix</p>
-            <p className="mt-1 leading-6 text-emerald-100/90">{remediation}</p>
+            <p className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-slate-500">
+              <svg className="h-3 w-3 text-emerald-400/70" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Recommended Fix
+            </p>
+            <p className="leading-relaxed text-emerald-100/80">{remediation}</p>
           </div>
-        ) : null}
+        )}
       </div>
-    </div>
+
+      {/* Hover glow effect */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{
+          background: `radial-gradient(circle at 50% 50%, ${severityConfig.glowColor.replace('0.3', '0.1')}, transparent 70%)`,
+        }}
+      />
+    </motion.div>
   );
 }

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Cpu, LogIn, Shield, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { loginRequestSchema, passwordPolicy, registerRequestSchema } from "@ai-archaeologist/shared/client";
-import { Button, Input } from "@ai-archaeologist/ui";
+import { Button, Input, PasswordStrength } from "@ai-archaeologist/ui";
 import { GlassPanel } from "../components/GlassPanel.js";
 import { login, register } from "../api/auth.js";
 
@@ -206,9 +206,13 @@ export function LoginPage(): React.JSX.Element {
                   value={password}
                   variant="glass"
                 />
-                <span className="text-xs text-slate-500">
-                  Minimum {passwordPolicy.minLength} characters for secure access.
-                </span>
+                {mode === "register" ? (
+                  <PasswordStrength password={password} />
+                ) : (
+                  <span className="text-xs text-slate-500">
+                    Minimum {passwordPolicy.minLength} characters for secure access.
+                  </span>
+                )}
               </label>
 
               {formError ?? authMutation.error ? (

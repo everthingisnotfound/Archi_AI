@@ -27,13 +27,23 @@ const SECTION_PATTERNS: Record<SectionType, RegExp> = {
   summary: /^#{1,3}\s*(summary|overview|conclusion)/im,
 };
 
-const SEVERITY_COLORS: Record<SeverityLevel, string> = {
-  critical: "text-rose-400 border-rose-400/30 bg-rose-500/10",
-  high: "text-amber-400 border-amber-400/30 bg-amber-500/10",
-  medium: "text-orange-400 border-orange-400/30 bg-orange-500/10",
-  low: "text-cyan-400 border-cyan-400/30 bg-cyan-500/10",
-  info: "text-violet-400 border-violet-400/30 bg-violet-500/10",
+const SEVERITY_CONFIG: Record<SeverityLevel, { textColor: string; bgColor: string; borderColor: string; glowColor: string }> = {
+  critical: { textColor: "text-rose-400", bgColor: "bg-rose-500/10", borderColor: "border-rose-500/30", glowColor: "rgba(244, 63, 94, 0.3)" },
+  high: { textColor: "text-amber-400", bgColor: "bg-amber-500/10", borderColor: "border-amber-500/30", glowColor: "rgba(251, 191, 36, 0.3)" },
+  medium: { textColor: "text-orange-400", bgColor: "bg-orange-500/10", borderColor: "border-orange-500/30", glowColor: "rgba(251, 146, 60, 0.3)" },
+  low: { textColor: "text-cyan-400", bgColor: "bg-cyan-500/10", borderColor: "border-cyan-500/30", glowColor: "rgba(34, 211, 238, 0.3)" },
+  info: { textColor: "text-violet-400", bgColor: "bg-violet-500/10", borderColor: "border-violet-500/30", glowColor: "rgba(167, 139, 250, 0.3)" },
 };
+
+const VARIANT_CONFIG: Record<string, { textColor: string; bgColor: string; borderColor: string; glowColor: string }> = {
+  cyan: { textColor: "text-cyan-400", bgColor: "bg-cyan-500/10", borderColor: "border-cyan-500/30", glowColor: "rgba(34, 211, 238, 0.3)" },
+  rose: { textColor: "text-rose-400", bgColor: "bg-rose-500/10", borderColor: "border-rose-500/30", glowColor: "rgba(244, 63, 94, 0.3)" },
+  amber: { textColor: "text-amber-400", bgColor: "bg-amber-500/10", borderColor: "border-amber-500/30", glowColor: "rgba(251, 191, 36, 0.3)" },
+  emerald: { textColor: "text-emerald-400", bgColor: "bg-emerald-500/10", borderColor: "border-emerald-500/30", glowColor: "rgba(52, 211, 153, 0.3)" },
+  violet: { textColor: "text-violet-400", bgColor: "bg-violet-500/10", borderColor: "border-violet-500/30", glowColor: "rgba(167, 139, 250, 0.3)" },
+};
+
+const DEFAULT_CONFIG = { textColor: "text-slate-400", bgColor: "bg-slate-500/10", borderColor: "border-slate-500/30", glowColor: "rgba(148, 163, 184, 0.3)" };
 
 function detectSeverity(line: string): SeverityLevel | undefined {
   const lowerLine = line.toLowerCase();
@@ -45,7 +55,6 @@ function detectSeverity(line: string): SeverityLevel | undefined {
   return undefined;
 }
 
-// Helper to create a section with optional severity
 function createSection(type: SectionType, title: string, severity: SeverityLevel | undefined): ParsedSection {
   return {
     type,
@@ -63,10 +72,8 @@ function parseBriefingMarkdown(markdown: string): ParsedSection[] {
   let currentContent: string[] = [];
 
   for (const line of lines) {
-    // Check if this is a new heading
     const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
     if (headingMatch) {
-      // Save current section
       if (currentSection) {
         currentSection.content = currentContent.join("\n").trim();
         currentSection.bullets = currentContent
@@ -78,7 +85,6 @@ function parseBriefingMarkdown(markdown: string): ParsedSection[] {
       const headingText = headingMatch[2]!.trim();
       const severity = detectSeverity(headingText);
 
-      // Detect section type
       let sectionType: SectionType = "summary";
       for (const [type, pattern] of Object.entries(SECTION_PATTERNS)) {
         if (pattern.test(headingText)) {
@@ -98,7 +104,6 @@ function parseBriefingMarkdown(markdown: string): ParsedSection[] {
     }
   }
 
-  // Save last section
   if (currentSection) {
     currentSection.content = currentContent.join("\n").trim();
     currentSection.bullets = currentContent
@@ -146,8 +151,8 @@ export function ThreatBriefingCards({
 
   if (sections.length === 0) {
     return (
-      <div className={cn("rounded-md border border-slate-800 bg-panel p-6", className)}>
-        <p className="text-sm text-slate-500">{content}</p>
+      <div className={cn("rounded-xl border border-slate-800 bg-panel p-6", className)}>
+        <p className="font-mono text-sm text-slate-500">{content}</p>
       </div>
     );
   }
@@ -157,95 +162,133 @@ export function ThreatBriefingCards({
       {sections.map((section, index) => {
         const variant = CARD_VARIANTS[section.type] || CARD_VARIANTS.summary;
         const Icon = variant.icon;
-        const severityClass = section.severity
-          ? SEVERITY_COLORS[section.severity]
-          : `border-${variant.color}-400/30 bg-${variant.color}-500/10`;
+
+        const severityConfig = section.severity
+          ? (SEVERITY_CONFIG[section.severity] ?? DEFAULT_CONFIG)
+          : (VARIANT_CONFIG[variant.color] ?? DEFAULT_CONFIG);
 
         return (
           <motion.div
             key={`${section.type}-${index}`}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1, duration: 0.4 }}
-            className={cn(
-              "overflow-hidden rounded-md border backdrop-blur-sm",
-              severityClass || `border-${variant.color}-400/30 bg-${variant.color}-500/10`,
-            )}
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            whileHover={{ scale: 1.01, y: -2 }}
+            transition={{ delay: index * 0.08, duration: 0.4, ease: "easeOut" }}
+            className="group relative overflow-hidden rounded-xl border p-5"
+            style={{
+              backgroundColor: `${severityConfig.glowColor.replace('0.3', '0.03')}`,
+              borderColor: severityConfig.borderColor,
+              boxShadow: `0 0 25px ${severityConfig.glowColor}, inset 0 0 30px ${severityConfig.glowColor.replace('0.3', '0.05')}`,
+            }}
           >
-            {/* Card header */}
+            {/* Animated top border gradient */}
             <div
-              className={cn(
-                "flex items-center gap-3 border-b border-slate-800/50 px-4 py-3",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg",
-                  `bg-${variant.color}-500/20`,
-                )}
+              className="absolute inset-x-0 top-0 h-px"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${severityConfig.glowColor}, transparent)`,
+              }}
+            />
+
+            {/* Corner decorations */}
+            <div className={`absolute left-0 top-0 h-5 w-5 border-l-2 border-t-2 rounded-tl-lg ${severityConfig.borderColor}`} />
+            <div className={`absolute right-0 top-0 h-5 w-5 border-r-2 border-t-2 rounded-tr-lg ${severityConfig.borderColor}`} />
+            <div className={`absolute bottom-0 left-0 h-5 w-5 border-b-2 border-l-2 rounded-bl-lg ${severityConfig.borderColor}`} />
+            <div className={`absolute bottom-0 right-0 h-5 w-5 border-b-2 border-r-2 rounded-br-lg ${severityConfig.borderColor}`} />
+
+            {/* Card header */}
+            <div className="flex items-center gap-4">
+              <motion.div
+                className="relative"
+                whileHover={{ scale: 1.1 }}
               >
-                <Icon
-                  className={cn(`text-${variant.color}-400`)}
-                  size={16}
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-xl"
+                  style={{
+                    backgroundColor: `${severityConfig.glowColor}`,
+                    boxShadow: `0 0 20px ${severityConfig.glowColor}`,
+                  }}
+                >
+                  <Icon
+                    className={severityConfig.textColor}
+                    size={22}
+                  />
+                </div>
+                {/* Glow ring */}
+                <div
+                  className="absolute inset-0 animate-pulse rounded-xl"
+                  style={{
+                    backgroundColor: "transparent",
+                    boxShadow: `0 0 30px ${severityConfig.glowColor}`,
+                    opacity: 0.5,
+                  }}
                 />
-              </div>
+              </motion.div>
+
               <div className="flex-1">
                 <span
                   className={cn(
-                    "text-xs font-medium uppercase tracking-wider",
-                    `text-${variant.color}-400`,
+                    "font-mono text-[10px] font-semibold uppercase tracking-[0.3em]",
+                    severityConfig.textColor,
                   )}
+                  style={{
+                    textShadow: `0 0 10px ${severityConfig.glowColor}`,
+                  }}
                 >
                   {variant.label}
                 </span>
-                <h3 className="text-sm font-semibold text-white">{section.title}</h3>
+                <h3 className="mt-1 font-mono text-base font-semibold text-white">
+                  {section.title}
+                </h3>
               </div>
+
               {section.severity && (
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                    section.severity === "critical" && "bg-rose-500/30 text-rose-300",
-                    section.severity === "high" && "bg-amber-500/30 text-amber-300",
-                    section.severity === "medium" && "bg-orange-500/30 text-orange-300",
-                    section.severity === "low" && "bg-cyan-500/30 text-cyan-300",
-                    section.severity === "info" && "bg-violet-500/30 text-violet-300",
-                  )}
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="rounded-lg px-3 py-1.5"
+                  style={{
+                    backgroundColor: `${severityConfig.glowColor}`,
+                    boxShadow: `0 0 15px ${severityConfig.glowColor}`,
+                  }}
                 >
-                  {section.severity}
-                </span>
+                  <span className={cn("font-mono text-[10px] font-bold uppercase tracking-wider", severityConfig.textColor)}>
+                    {section.severity}
+                  </span>
+                </motion.div>
               )}
             </div>
 
             {/* Card content */}
-            <div className="px-4 py-3">
+            <div className="mt-5">
               {/* Bullet points */}
               {section.bullets.length > 0 && (
-                <ul className="mb-3 space-y-1.5">
+                <ul className="space-y-3">
                   {section.bullets.map((bullet, bulletIndex) => (
                     <motion.li
                       key={bulletIndex}
-                      initial={{ opacity: 0, x: -8 }}
+                      initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{
-                        delay: index * 0.1 + bulletIndex * 0.05,
+                        delay: index * 0.08 + bulletIndex * 0.05,
                       }}
-                      className="flex items-start gap-2 text-sm text-slate-300"
+                      className="flex items-start gap-3"
                     >
-                      <span
-                        className={cn(
-                          "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                          `bg-${variant.color}-400`,
-                        )}
+                      <div
+                        className="mt-2 h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: severityConfig.glowColor,
+                          boxShadow: `0 0 8px ${severityConfig.glowColor}`,
+                        }}
                       />
-                      <span>{bullet}</span>
+                      <span className="font-mono text-sm leading-relaxed text-slate-300">{bullet}</span>
                     </motion.li>
                   ))}
                 </ul>
               )}
 
-              {/* Additional content (non-bullet) */}
+              {/* Additional content */}
               {section.content && (
-                <p className="text-sm leading-relaxed text-slate-400">
+                <p className="mt-4 font-mono text-sm leading-relaxed text-slate-400">
                   {section.content
                     .split("\n")
                     .filter((line) => !line.startsWith("- ") && !line.startsWith("* "))
@@ -254,6 +297,14 @@ export function ThreatBriefingCards({
                 </p>
               )}
             </div>
+
+            {/* Hover glow effect */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              style={{
+                background: `radial-gradient(circle at 50% 0%, ${severityConfig.glowColor.replace('0.3', '0.1')}, transparent 60%)`,
+              }}
+            />
           </motion.div>
         );
       })}

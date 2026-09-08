@@ -17,7 +17,7 @@ export function issueCsrfToken(response: Response, secure: boolean): string {
   const token = randomBytes(32).toString("base64url");
   response.cookie(csrfCookieName, token, {
     httpOnly: false,
-    sameSite: "lax",
+    sameSite: secure ? "none" : "lax",
     secure,
     path: "/",
   });

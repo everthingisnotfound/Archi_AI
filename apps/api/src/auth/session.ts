@@ -28,7 +28,7 @@ export function setSessionCookie(args: {
     expires: args.expiresAt,
     httpOnly: true,
     path: "/",
-    sameSite: "lax",
+    sameSite: args.secure ? "none" : "lax",
     secure: args.secure,
   });
 }
@@ -37,7 +37,7 @@ export function clearSessionCookie(response: Response, cookieName: string, secur
   response.clearCookie(cookieName, {
     httpOnly: true,
     path: "/",
-    sameSite: "lax",
+    sameSite: secure ? "none" : "lax",
     secure,
   });
 }

@@ -14,6 +14,18 @@ const folderMetadataSchema = z.object({
   totalBytes: z.number().int().min(0),
 });
 
+const websiteMetadataSchema = z
+  .object({
+    authorizationConfirmed: z.literal(true),
+    crawl: z
+      .object({
+        maxDepth: z.number().int().min(0).max(5),
+        maxPages: z.number().int().min(1).max(100),
+      })
+      .optional(),
+  })
+  .passthrough();
+
 export type SourceForValidation = {
   metadata: unknown;
   type: "GITHUB" | "ZIP" | "FOLDER" | "WEBSITE";
@@ -43,6 +55,7 @@ export function validateRepositorySource(source: SourceForValidation, config: Wo
         statusCode: 400,
       });
     }
+    websiteMetadataSchema.parse(source.metadata);
     return;
   }
 
@@ -88,4 +101,3 @@ function validateGithubSource(uri: string | null): void {
     });
   }
 }
-

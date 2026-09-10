@@ -24,6 +24,7 @@ export function RepositoriesPage(): React.JSX.Element {
   const navigate = useNavigate();
   const [githubUrl, setGithubUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [websiteAuthorizationConfirmed, setWebsiteAuthorizationConfirmed] = useState(false);
   const [folderFiles, setFolderFiles] = useState<FileList | null>(null);
   const queryClient = useQueryClient();
 
@@ -44,9 +45,14 @@ export function RepositoriesPage(): React.JSX.Element {
 
   const websiteMutation = useMutation({
     mutationFn: () =>
-      createWebsiteRepository({ organizationId: organizationId ?? "", url: websiteUrl }),
+      createWebsiteRepository({
+        authorizationConfirmed: true,
+        organizationId: organizationId ?? "",
+        url: websiteUrl,
+      }),
     onSuccess: async (result) => {
       setWebsiteUrl("");
+      setWebsiteAuthorizationConfirmed(false);
       await queryClient.invalidateQueries({ queryKey: ["repositories", organizationId] });
       navigate(`/repositories/${result.repository.id}`);
     },
@@ -116,8 +122,8 @@ export function RepositoriesPage(): React.JSX.Element {
             Repositories
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            Add a GitHub repo, archive, folder, or a public deployed URL. Live sites are crawled
-            (homepage plus a few same-origin pages) and analyzed like a snapshot — not a full source dump.
+            Add a GitHub repo, archive, folder, or public deployed URL. Live sites are passively
+            mapped across their public same-origin pages and analyzed as an evidence snapshot — not a source dump.
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -184,15 +190,24 @@ export function RepositoriesPage(): React.JSX.Element {
             />
             <Button
               aria-label="Analyze deployed website"
-              disabled={!websiteUrl || websiteMutation.isPending}
+              disabled={!websiteUrl || !websiteAuthorizationConfirmed || websiteMutation.isPending}
               size="icon"
             >
               <Plus aria-hidden="true" size={18} />
             </Button>
           </div>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            Public HTTPS pages only. Private/local addresses are blocked.
+            Public HTTP(S) pages only. Private/local addresses, login flows, form submission, and active probing are blocked.
           </p>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs leading-5 text-slate-400">
+            <input
+              checked={websiteAuthorizationConfirmed}
+              className="mt-1 accent-cyan-400"
+              onChange={(event) => { setWebsiteAuthorizationConfirmed(event.target.checked); }}
+              type="checkbox"
+            />
+            <span>I confirm that I own this site or have permission to assess its public pages.</span>
+          </label>
         </form>
 
         <div className="rounded-xl border border-cyan-400/15 bg-white/[0.03] p-4 backdrop-blur-sm">
@@ -264,4 +279,3 @@ export function RepositoriesPage(): React.JSX.Element {
     </div>
   );
 }
-

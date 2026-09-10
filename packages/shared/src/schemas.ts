@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { passwordPolicy, repositoryLimitDefaults } from "./limits.js";
+import { passwordPolicy, repositoryLimitDefaults, websiteCrawlDefaults } from "./limits.js";
 import { normalizeRepositoryRelativePath } from "./pathSafety.js";
 import { parsePublicHttpUrl } from "./urlSafety.js";
 
@@ -31,6 +31,17 @@ export const loginRequestSchema = z.object({
 
 export const websiteRepositoryRequestSchema = z.object({
   organizationId: idSchema,
+  authorizationConfirmed: z.literal(true, {
+    errorMap: () => ({
+      message: "Confirm that you are authorized to assess this public website.",
+    }),
+  }),
+  crawl: z
+    .object({
+      maxDepth: z.coerce.number().int().min(0).max(5).default(websiteCrawlDefaults.maxDepth),
+      maxPages: z.coerce.number().int().min(1).max(100).default(websiteCrawlDefaults.maxPages),
+    })
+    .default({}),
   url: z
     .string()
     .trim()

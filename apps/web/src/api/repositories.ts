@@ -79,9 +79,18 @@ export function sendChatMessage(repositoryId: string, sessionId: string, content
   });
 }
 
-export function createWebsiteRepository(input: { organizationId: string; url: string }) {
+export function createWebsiteRepository(input: {
+  authorizationConfirmed: true;
+  crawl?: { maxDepth?: number; maxPages?: number };
+  organizationId: string;
+  url: string;
+}) {
   return apiRequest(`/organizations/${input.organizationId}/repositories/website`, {
-    body: JSON.stringify({ url: input.url }),
+    body: JSON.stringify({
+      authorizationConfirmed: input.authorizationConfirmed,
+      crawl: input.crawl,
+      url: input.url,
+    }),
     method: "POST",
     schema: repositoryCreateResponseSchema,
   });

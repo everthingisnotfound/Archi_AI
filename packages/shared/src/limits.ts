@@ -13,3 +13,12 @@ export const passwordPolicy = {
   maxLength: 256,
 } as const;
 
+// Live-site assessment is intentionally bounded. It is a passive inventory of
+// pages a normal unauthenticated browser can reach, not an unbounded crawler or
+// an active vulnerability scanner.
+export const websiteCrawlDefaults = {
+  maxAssets: 24,
+  maxDepth: 3,
+  maxPages: 40,
+  requestDelayMs: 250,
+} as const;

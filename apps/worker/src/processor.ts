@@ -6,7 +6,7 @@ import type { WorkerConfig } from "./config.js";
 import type { WorkerLogger } from "./logger.js";
 import { copyFolderStaging } from "./retrieve/folderCopy.js";
 import { cloneGithubRepository } from "./retrieve/githubClone.js";
-import { crawlPublicWebsite } from "./retrieve/websiteCrawl.js";
+import { crawlPublicWebsite, type WebsiteCrawlResult } from "./retrieve/websiteCrawl.js";
 import { extractZipArchive } from "./retrieve/zipExtract.js";
 import { scanRepositoryDirectory } from "./scan/repositoryScan.js";
 import { persistRepositorySnapshot } from "./snapshot/persistSnapshot.js";
@@ -75,6 +75,7 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
       const repositoryRoot = repositoryDirectoryInJob(jobWorkspace);
       let commitSha: string | undefined;
       let defaultBranch: string | undefined;
+      let websiteCrawl: WebsiteCrawlResult | undefined;
 
       await job.updateProgress(20);
       if (ingestionJob.source.type === "GITHUB") {
@@ -85,7 +86,11 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
         commitSha = cloneResult.commitSha;
         defaultBranch = cloneResult.defaultBranch;
       } else if (ingestionJob.source.type === "WEBSITE") {
-        await crawlPublicWebsite(ingestionJob.source.uri ?? "", repositoryRoot);
+        websiteCrawl = await crawlPublicWebsite(
+          ingestionJob.source.uri ?? "",
+          repositoryRoot,
+          websiteCrawlOptions(ingestionJob.source.metadata, dependencies.config),
+        );
         defaultBranch = "live";
       } else if (ingestionJob.source.type === "ZIP") {
         await extractZipArchive(
@@ -155,6 +160,7 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
             stage: "ingested",
             technologies: scan.technologies,
             totalBytes: scan.totalBytes,
+            ...(websiteCrawl ? { websiteCrawl } : {}),
           },
           status: "SUCCEEDED",
         },
@@ -183,6 +189,23 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
       });
       throw error;
     }
+  };
+}
+
+function websiteCrawlOptions(metadata: unknown, config: WorkerConfig) {
+  const metadataRecord = metadata && typeof metadata === "object" ? metadata : {};
+  const crawl =
+    "crawl" in metadataRecord && metadataRecord.crawl && typeof metadataRecord.crawl === "object"
+      ? metadataRecord.crawl
+      : {};
+  const requestedPages = "maxPages" in crawl && typeof crawl.maxPages === "number" ? crawl.maxPages : config.WEBSITE_CRAWL_MAX_PAGES;
+  const requestedDepth = "maxDepth" in crawl && typeof crawl.maxDepth === "number" ? crawl.maxDepth : config.WEBSITE_CRAWL_MAX_DEPTH;
+
+  return {
+    maxAssets: config.WEBSITE_CRAWL_MAX_ASSETS,
+    maxDepth: Math.min(requestedDepth, config.WEBSITE_CRAWL_MAX_DEPTH),
+    maxPages: Math.min(requestedPages, config.WEBSITE_CRAWL_MAX_PAGES),
+    requestDelayMs: config.WEBSITE_CRAWL_REQUEST_DELAY_MS,
   };
 }
 

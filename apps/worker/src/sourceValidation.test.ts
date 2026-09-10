@@ -16,6 +16,10 @@ const config = {
   REDIS_URL: "redis://localhost:6379",
   WORKER_CONCURRENCY: 1,
   WORKER_HEALTH_PORT: 4100,
+  WEBSITE_CRAWL_MAX_ASSETS: 24,
+  WEBSITE_CRAWL_MAX_DEPTH: 3,
+  WEBSITE_CRAWL_MAX_PAGES: 40,
+  WEBSITE_CRAWL_REQUEST_DELAY_MS: 250,
   WORKSPACE_ROOT: "./data/workspaces",
 } satisfies WorkerConfig;
 
@@ -50,7 +54,7 @@ describe("source validation", () => {
     expect(() => {
       validateRepositorySource(
         {
-          metadata: {},
+          metadata: { authorizationConfirmed: true, crawl: { maxDepth: 3, maxPages: 40 } },
           type: "WEBSITE",
           uri: "https://www.flipkart.com/",
         },

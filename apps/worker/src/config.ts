@@ -1,5 +1,5 @@
 import { intEnv, loadEnv, stringEnv } from "@ai-archaeologist/config";
-import { repositoryLimitDefaults } from "@ai-archaeologist/shared";
+import { repositoryLimitDefaults, websiteCrawlDefaults } from "@ai-archaeologist/shared";
 import { z } from "zod";
 
 export const workerConfig = loadEnv({
@@ -17,7 +17,10 @@ export const workerConfig = loadEnv({
   WORKSPACE_ROOT: z.string().min(1).default("./data/workspaces"),
   AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
   INTERNAL_JOB_TOKEN_SECRET: z.string().min(32),
+  WEBSITE_CRAWL_MAX_ASSETS: intEnv(websiteCrawlDefaults.maxAssets),
+  WEBSITE_CRAWL_MAX_DEPTH: intEnv(websiteCrawlDefaults.maxDepth),
+  WEBSITE_CRAWL_MAX_PAGES: intEnv(websiteCrawlDefaults.maxPages),
+  WEBSITE_CRAWL_REQUEST_DELAY_MS: intEnv(websiteCrawlDefaults.requestDelayMs),
 });
 
 export type WorkerConfig = typeof workerConfig;
-

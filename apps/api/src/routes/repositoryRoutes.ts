@@ -471,6 +471,8 @@ export function createRepositoryRouter(
         const source = await transaction.repositorySource.create({
           data: {
             metadata: {
+              authorizationConfirmed: body.authorizationConfirmed,
+              crawl: body.crawl,
               normalizedUrl: body.url,
             },
             organizationId: params.organizationId,

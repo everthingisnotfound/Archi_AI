@@ -17,6 +17,7 @@ import { createAuthRouter } from "./routes/authRoutes.js";
 import { createChatRouter } from "./routes/chatRoutes.js";
 import { createRepositoryRouter } from "./routes/repositoryRoutes.js";
 import { asyncHandler } from "./http/asyncHandler.js";
+import { parseCorsOrigins } from "./cors.js";
 
 export type ApiDependencies = {
   config: ApiConfig;
@@ -34,10 +35,17 @@ export function createApiApp(dependencies: ApiDependencies): express.Express {
   app.set("trust proxy", config.NODE_ENV === "production" ? 1 : false);
 
   app.use(helmet());
+  const allowedOrigins = parseCorsOrigins(config.CORS_ORIGIN);
   app.use(
     cors({
       credentials: true,
-      origin: config.CORS_ORIGIN,
+      origin: (requestOrigin, callback) => {
+        if (!requestOrigin || allowedOrigins.includes(requestOrigin)) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
     }),
   );
   app.use(express.json({ limit: "1mb" }));

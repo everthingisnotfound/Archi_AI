@@ -263,7 +263,7 @@ function buildPageRecord(input: {
     cookies: parseSetCookies(input.page.setCookies),
     depth: input.depth,
     ...(input.discoveredFrom ? { discoveredFrom: input.discoveredFrom } : {}),
-    description: extractMeta(html, "description") ?? extractMeta(html, "og:description"),
+    description: extractMeta(html, "description") ?? extractMeta(html, "og:description") ?? "",
     externalLinkCount: links.externalCount,
     forms: extractForms(html, input.page.finalUrl),
     links: links.internal,

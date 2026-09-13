@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const apiConfig = loadEnv({
   API_BASE_URL: z.string().url().default("http://localhost:4000"),
-  CORS_ORIGIN: z.string().url().default("http://localhost:5173"),
+  CORS_ORIGIN: z.string().transform((value) => value.split(",").map((origin) => origin.trim()).filter(Boolean)).default("http://localhost:5173"),
   DATABASE_URL: stringEnv("DATABASE_URL"),
   INTERNAL_JOB_TOKEN_SECRET: z.string().min(32),
   MAX_REPOSITORY_BYTES: intEnv(repositoryLimitDefaults.maxRepositoryBytes),

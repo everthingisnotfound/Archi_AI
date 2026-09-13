@@ -44,9 +44,7 @@ services:
       - .env
     environment:
       AI_SERVICE_URL: http://ai:8000
-      DATABASE_URL: postgresql://archaeologist:archaeologist@postgres:5432/archaeologist?schema=public
-      REDIS_URL: redis://redis:6379
-      WORKSPACE_ROOT: /var/lib/archaeologist/workspaces
+      CORS_ORIGIN: 'http://localhost:5173,http://localhost:8080'
     volumes:
       - workspace-data:/var/lib/archaeologist/workspaces
     healthcheck:
@@ -72,9 +70,7 @@ services:
       - .env
     environment:
       AI_SERVICE_URL: http://ai:8000
-      DATABASE_URL: postgresql://archaeologist:archaeologist@postgres:5432/archaeologist?schema=public
-      REDIS_URL: redis://redis:6379
-      WORKSPACE_ROOT: /var/lib/archaeologist/workspaces
+      CORS_ORIGIN: 'http://localhost:5173,http://localhost:8080'
     volumes:
       - workspace-data:/var/lib/archaeologist/workspaces
     healthcheck:
@@ -95,9 +91,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://archaeologist:archaeologist@postgres:5432/archaeologist?schema=public
-      REDIS_URL: redis://redis:6379
-      WORKSPACE_ROOT: /var/lib/archaeologist/workspaces
+      AI_SERVICE_URL: http://localhost:8000
     volumes:
       - workspace-data:/var/lib/archaeologist/workspaces
     healthcheck:
@@ -134,4 +128,3 @@ volumes:
   postgres-data:
   redis-data:
   workspace-data:
-

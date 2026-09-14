@@ -17,6 +17,8 @@ const folderMetadataSchema = z.object({
 const websiteMetadataSchema = z
   .object({
     authorizationConfirmed: z.literal(true),
+    authorizedAt: z.string().datetime(),
+    authorizedByUserId: z.string().uuid(),
     crawl: z
       .object({
         maxDepth: z.number().int().min(0).max(5),

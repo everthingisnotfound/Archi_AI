@@ -472,6 +472,8 @@ export function createRepositoryRouter(
           data: {
             metadata: {
               authorizationConfirmed: body.authorizationConfirmed,
+              authorizedAt: new Date().toISOString(),
+              authorizedByUserId: request.auth?.user.id,
               crawl: body.crawl,
               normalizedUrl: body.url,
             },

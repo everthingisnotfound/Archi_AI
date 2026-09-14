@@ -11,6 +11,8 @@ describe("parsePublicHttpUrl", () => {
     expect(() => parsePublicHttpUrl("http://127.0.0.1")).toThrow();
     expect(() => parsePublicHttpUrl("http://192.168.1.10")).toThrow();
     expect(() => parsePublicHttpUrl("http://169.254.169.254/latest/meta-data")).toThrow();
+    expect(() => parsePublicHttpUrl("http://[::1]/")).toThrow();
+    expect(() => parsePublicHttpUrl("http://[fd00::1]/")).toThrow();
   });
 });
 

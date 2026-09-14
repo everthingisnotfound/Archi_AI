@@ -54,7 +54,12 @@ describe("source validation", () => {
     expect(() => {
       validateRepositorySource(
         {
-          metadata: { authorizationConfirmed: true, crawl: { maxDepth: 3, maxPages: 40 } },
+          metadata: {
+            authorizationConfirmed: true,
+            authorizedAt: "2026-09-14T00:00:00.000Z",
+            authorizedByUserId: "00000000-0000-0000-0000-000000000001",
+            crawl: { maxDepth: 3, maxPages: 40 },
+          },
           type: "WEBSITE",
           uri: "https://www.flipkart.com/",
         },

@@ -58,6 +58,15 @@ type CapturedPage = {
   url: string;
 };
 
+type DiscoveredEndpoint = {
+  contentType: string;
+  method: "GET";
+  path: string;
+  source: string;
+  status: number;
+  url: string;
+};
+
 type RobotsPolicy = { allowed: boolean; ruleCount: number; status?: number; url: string };
 type RobotsRule = { allowed: boolean; path: string };
 
@@ -69,6 +78,10 @@ export type WebsiteCrawlOptions = {
 };
 
 export type WebsiteCrawlResult = {
+  coverage: {
+    complete: boolean;
+    reasons: string[];
+  };
   discoveredCount: number;
   failedCount: number;
   maxDepth: number;
@@ -125,6 +138,7 @@ export async function crawlPublicWebsite(
     scopeOrigin,
   });
   pages.push(firstPage);
+  const coverage = assessCoverage(homepage.body.toString("utf8"), firstPage);
   await writeBinary(path.join(targetDirectory, firstPage.path), homepage.body);
   enqueueLinks(firstPage, discoveryQueue, queuedUrls, visitedUrls, options.maxDepth, skipped);
 
@@ -185,10 +199,18 @@ export async function crawlPublicWebsite(
   }
 
   const assets = await captureSameOriginAssets({ options, pages, scopeOrigin, targetDirectory });
+  const endpoints = await discoverAndCaptureScriptEndpoints({
+    options,
+    pages,
+    scopeOrigin,
+    targetDirectory,
+  });
   const rootSecurityHeaders = pages[0]?.securityHeaders ?? {};
   const rootCookies = pages[0]?.cookies ?? [];
   const siteProfile = {
     assets,
+    coverage,
+    endpoints,
     crawl: {
       discoveredCount: visitedUrls.size + discoveryQueue.length,
       failedCount: failed.length,
@@ -218,12 +240,17 @@ export async function crawlPublicWebsite(
   );
   await writeBinary(
     path.join(targetDirectory, "_archaeologist", "crawl-observations.json"),
-    Buffer.from(JSON.stringify({ failed: failed.slice(0, 100), skipped: skipped.slice(0, 100) }, null, 2), "utf8"),
+    Buffer.from(JSON.stringify({
+      coverage,
+      failed: failed.slice(0, 100),
+      skipped: skipped.slice(0, 100),
+    }, null, 2), "utf8"),
   );
   await writeBinary(path.join(targetDirectory, "README.md"), Buffer.from(buildCrawlReadme(siteProfile), "utf8"));
 
   return {
     discoveredCount: siteProfile.crawl.discoveredCount,
+    coverage,
     failedCount: failed.length,
     maxDepth: options.maxDepth,
     maxPages: options.maxPages,
@@ -278,6 +305,22 @@ function buildPageRecord(input: {
   };
 }
 
+function assessCoverage(html: string, page: CapturedPage): { complete: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const normalized = html.toLowerCase();
+  if (page.links.length === 0 && page.resources.some((resource) => resource.kind === "script")) {
+    reasons.push("entry page is a JavaScript application shell with no static navigation links");
+  }
+  if (
+    /(verify|verification|captcha|challenge|identity|daybreak|cloudflare|access denied|checking your browser)/i.test(
+      normalized,
+    )
+  ) {
+    reasons.push("entry page appears to be a verification, bot challenge, or access-denied interstitial");
+  }
+  return { complete: reasons.length === 0, reasons };
+}
+
 function enqueueLinks(
   page: CapturedPage,
   queue: CrawlCandidate[],
@@ -308,6 +351,7 @@ async function captureSameOriginAssets(input: {
     for (const resource of page.resources) {
       if (!resource.thirdParty && !candidates.has(resource.url)) candidates.set(resource.url, resource);
     }
+
   }
 
   const storedPaths = new Map<string, string>();
@@ -338,6 +382,78 @@ async function captureSameOriginAssets(input: {
     }
   }
   return assets;
+}
+
+async function discoverAndCaptureScriptEndpoints(input: {
+  options: Required<WebsiteCrawlOptions>;
+  pages: CapturedPage[];
+  scopeOrigin: string;
+  targetDirectory: string;
+}): Promise<DiscoveredEndpoint[]> {
+  const scripts = input.pages.flatMap((page) =>
+    page.resources.filter((resource) => resource.kind === "script" && !resource.thirdParty),
+  );
+  const candidates = new Map<string, string>();
+  for (const script of scripts.slice(0, input.options.maxAssets)) {
+    try {
+      const response = await fetchResource(script.url, {
+        allowedOrigin: input.scopeOrigin,
+        maxBytes: MAX_BYTES_PER_ASSET,
+      });
+      if (response.status >= 400 || response.truncated) continue;
+      for (const endpoint of extractScriptEndpoints(response.body.toString("utf8"), script.url, input.scopeOrigin)) {
+        candidates.set(endpoint, script.url);
+      }
+    } catch {
+      // Endpoint discovery is supplemental; the original script reference remains in the profile.
+    }
+  }
+
+  const endpoints: DiscoveredEndpoint[] = [];
+  for (const [endpoint, source] of [...candidates.entries()].slice(0, input.options.maxAssets * 4)) {
+    await wait(input.options.requestDelayMs);
+    try {
+      const response = await fetchResource(endpoint, {
+        allowedOrigin: input.scopeOrigin,
+        maxBytes: MAX_BYTES_PER_PAGE,
+      });
+      if (response.status >= 400 || response.truncated) continue;
+      const relativePath = `endpoints/${String(endpoints.length).padStart(3, "0")}${extensionFromUrl(endpoint, response.contentType)}`;
+      await writeBinary(path.join(input.targetDirectory, relativePath), response.body);
+      endpoints.push({
+        contentType: response.contentType,
+        method: "GET",
+        path: relativePath,
+        source,
+        status: response.status,
+        url: canonicalizeUrl(response.finalUrl),
+      });
+    } catch {
+      // A public endpoint may require browser headers or a session; retain only successful observations.
+    }
+  }
+  return endpoints;
+}
+
+function extractScriptEndpoints(script: string, baseUrl: string, scopeOrigin: string): string[] {
+  const candidates = new Set<string>();
+  const patterns = [
+    /["'`](\/(?:api|graphql|swagger|openapi|\.well-known)(?:\/[^"'`\\\s]*)?)["'`]/gi,
+    /["'`](https?:\/\/[^"'`\\\s]+)["'`]/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of script.matchAll(pattern)) {
+      const value = match[1];
+      if (!value) continue;
+      const resolved = resolveUrl(baseUrl, value);
+      if (!resolved) continue;
+      const parsed = new URL(resolved);
+      if (parsed.origin === scopeOrigin && !isPotentiallyStateChangingPath(parsed.pathname)) {
+        candidates.add(canonicalizeUrl(parsed.href));
+      }
+    }
+  }
+  return [...candidates];
 }
 
 async function loadRobotsPolicy(scopeOrigin: string): Promise<{ policy: RobotsPolicy; rules: RobotsRule[] }> {
@@ -624,6 +740,8 @@ function extensionFromUrl(url: string, contentType: string): string {
 
 function buildCrawlReadme(profile: {
   crawl: { maxDepth: number; maxPages: number };
+  coverage: { complete: boolean; reasons: string[] };
+  endpoints: DiscoveredEndpoint[];
   pages: CapturedPage[];
   scopeOrigin: string;
   startUrl: string;
@@ -635,6 +753,13 @@ function buildCrawlReadme(profile: {
     "",
     `Captured from \`${profile.startUrl}\` within \`${profile.scopeOrigin}\`.`,
     "",
+    "## Coverage",
+    "",
+    profile.coverage.complete
+      ? "- Complete within the configured passive crawl limits."
+      : `- **Incomplete:** ${profile.coverage.reasons.join("; ")}.`,
+    "- Coverage refers only to unauthenticated passive discovery; protected or client-only routes may remain undiscovered.",
+    "",
     "## Assessment scope",
     "",
     `- Public same-origin HTML pages, breadth-first, up to ${profile.crawl.maxPages} pages and depth ${profile.crawl.maxDepth}.`,
@@ -643,6 +768,13 @@ function buildCrawlReadme(profile: {
     "## Captured pages",
     "",
     ...profile.pages.map((page) => `- [${page.url}](${page.path}) — depth ${page.depth}, HTTP ${page.status}`),
+    "",
+    "## Passively observed API endpoints",
+    "",
+    "- These are same-origin GET requests found as literal URLs in downloaded JavaScript. No credentials, mutations, or payloads were sent.",
+    ...(profile.endpoints.length > 0
+      ? profile.endpoints.map((endpoint) => `- [${endpoint.url}](${endpoint.path}) — HTTP ${endpoint.status}`)
+      : ["- none observed"]),
     "",
     "## Third-party resource and form hosts",
     "",

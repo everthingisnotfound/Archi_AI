@@ -30,8 +30,8 @@ export function isPrivateIpv4(address: string): boolean {
     return false;
   }
 
-  const [a, b] = octets as [number, number, number, number];
-  if (a === 0 || a === 10 || a === 127) {
+  const [a, b, c] = octets as [number, number, number, number];
+  if (a === 0 || a === 10 || a === 127 || a >= 224) {
     return true;
   }
   if (a === 169 && b === 254) {
@@ -46,21 +46,38 @@ export function isPrivateIpv4(address: string): boolean {
   if (a === 100 && b >= 64 && b <= 127) {
     return true;
   }
+  if (a === 192 && b === 0 && c <= 2) {
+    return true;
+  }
+  if (a === 198 && b >= 18 && b <= 19) {
+    return true;
+  }
 
   return false;
 }
 
 export function isPrivateIpv6(address: string): boolean {
-  const normalized = address.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
+  const normalized = (address.toLowerCase().replace(/^\[|\]$/g, "").split("%")[0] ?? "");
+  if (normalized === "::" || normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
     return true;
   }
-  if (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80")) {
+  if (
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe8") ||
+    normalized.startsWith("ff") ||
+    normalized.startsWith("2001:db8:")
+  ) {
     return true;
   }
   if (normalized.startsWith("::ffff:")) {
     const mapped = normalized.slice("::ffff:".length);
-    return isPrivateIpv4(mapped);
+    if (mapped.includes(".")) return isPrivateIpv4(mapped);
+    const groups = mapped.split(":").map((group) => Number.parseInt(group, 16));
+    const [first, second] = groups;
+    if (groups.length === 2 && first !== undefined && second !== undefined && groups.every(Number.isFinite)) {
+      return isPrivateIpv4(`${first >> 8}.${first & 255}.${second >> 8}.${second & 255}`);
+    }
   }
   return false;
 }

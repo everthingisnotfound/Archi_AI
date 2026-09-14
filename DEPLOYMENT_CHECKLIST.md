@@ -1,5 +1,29 @@
 # 🚀 Archi AI - Ready for Live Deployment
 
+> **Release gate (2026-09-14):** The repository build and focused tests pass, but a live
+> deployment is not verified until PostgreSQL, Redis, API, worker, AI, and web are deployed
+> together and one end-to-end ingestion completes. Treat this as a controlled passive-analysis
+> demo, not an active Burp Suite-style scanner. The website crawler does not log in, bypass
+> verification pages, execute browser JavaScript, submit forms, mutate state, or send payloads.
+
+## Tonight's mandatory checks
+
+1. Configure production PostgreSQL, Redis, API, worker, AI, and web services.
+2. Run `npm run db:migrate:deploy` before accepting traffic.
+3. Confirm API, worker, and AI `/healthz` endpoints are healthy.
+4. Test register -> login -> submit a small GitHub repository -> worker ingestion -> analysis results.
+5. Submit one authorized public website and verify `site-profile.json`, `crawl-observations.json`,
+   and `endpoints/` are created.
+6. Test a verification/interstitial page and confirm the UI reports incomplete coverage.
+
+## Known release blockers for broader claims
+
+- DNS validation and the later HTTP connection are separate operations; isolate the crawler
+  from internal networks before allowing arbitrary targets.
+- JavaScript shells and identity-verification pages can prevent complete route discovery.
+- Authenticated crawling, token/session analysis, active probing, form submission, and exploit
+  verification are not implemented.
+
 ## What We Fixed Today
 
 ### 🐛 Bugs Fixed

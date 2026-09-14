@@ -1,5 +1,10 @@
 # Archi AI - Production Deployment & Feature Summary
 
+> **Important status correction:** This document describes deployment configuration, not proof
+> of a completed production deployment. The full build passes locally, but the Railway services
+> and end-to-end ingestion flow still require live verification. Deploy only as a controlled,
+> authorized passive-analysis demo until those checks pass.
+
 ## 🎯 Completed Work
 
 ### Phase 1: Bug Fixes ✅
@@ -86,12 +91,11 @@
 - Cascade delete prevents orphaned data
 - RBAC enforced on all endpoints
 
-## 📈 What's Production Ready
+## 📈 What's Ready for Controlled Deployment
 - ✅ Code compiles without errors (npm run typecheck)
-- ✅ Docker builds successfully
-- ✅ All services communicate correctly
+- ⚠️ Docker/ Railway service communication still requires a live environment check
 - ✅ Error handling returns proper JSON
-- ✅ Database migrations applied
+- ⚠️ Database migrations must be run in the target environment
 - ✅ UI buttons wired to API
 - ✅ Confirmation dialogs prevent accidents
 
@@ -121,4 +125,6 @@ Before going fully live:
 
 ---
 
-**All code is pushed to GitHub. Your repo is production-ready.** 🎉
+The repository is build-ready for a controlled deployment after the end-to-end checks in
+`DEPLOYMENT_CHECKLIST.md`. It is not an active scanner and cannot guarantee coverage of
+JavaScript verification/interstitial pages or authenticated areas.

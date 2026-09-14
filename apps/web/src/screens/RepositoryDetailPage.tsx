@@ -30,6 +30,15 @@ type ShellContext = {
 
 const activeJobStatuses = new Set(["QUEUED", "RUNNING"]);
 
+type WebsiteCrawlSummary = {
+  coverage?: { complete?: boolean; reasons?: string[] };
+  discoveredCount?: number;
+  failedCount?: number;
+  pageCount?: number;
+  skippedCount?: number;
+  endpoints?: Array<{ url?: string }>;
+};
+
 export function RepositoryDetailPage(): React.JSX.Element {
   const { repositoryId = "" } = useParams();
   const { me } = useOutletContext<ShellContext>();
@@ -162,6 +171,10 @@ export function RepositoryDetailPage(): React.JSX.Element {
     : [];
   const sourceType = repositoryQuery.data?.sourceType;
   const isWebsite = sourceType === "WEBSITE";
+  const websiteCrawl =
+    isWebsite && ingestionJob?.result && typeof ingestionJob.result.websiteCrawl === "object"
+      ? (ingestionJob.result.websiteCrawl as WebsiteCrawlSummary)
+      : undefined;
   const summaryDocument = documentsQuery.data?.items.find((item) => item.type === "README");
   const deepDocument = documentsQuery.data?.items.find((item) => item.type === "DEEP_DIVE");
 
@@ -247,6 +260,77 @@ export function RepositoryDetailPage(): React.JSX.Element {
           ) : null}
         </div>
       </section>
+
+      {websiteCrawl ? (
+        <section className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-5">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div>
+              <div className="flex items-center gap-2">
+                <ScanSearch aria-hidden="true" className="text-cyan-300" size={18} />
+                <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-100">
+                  Application intelligence
+                </h2>
+                <Badge variant={websiteCrawl.coverage?.complete ? "cyan" : "neutral"}>
+                  {websiteCrawl.coverage?.complete ? "Coverage complete" : "Coverage incomplete"}
+                </Badge>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Archi reconstructed the public application surface from HTML, security headers,
+                JavaScript bundles, and observed same-origin GET endpoints. This is deployed
+                evidence—not a claim that protected routes were tested.
+              </p>
+            </div>
+            <div className="rounded-lg border border-cyan-400/15 bg-slate-950/40 px-4 py-3 text-right">
+              <p className="text-2xl font-semibold text-cyan-200">
+                {websiteCrawl.endpoints?.length ?? 0}
+              </p>
+              <p className="text-xs uppercase tracking-wider text-slate-500">API signals</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              ["Pages", websiteCrawl.pageCount ?? 0],
+              ["API signals", websiteCrawl.endpoints?.length ?? 0],
+              ["Discovered", websiteCrawl.discoveredCount ?? 0],
+              ["Skipped", websiteCrawl.skippedCount ?? 0],
+              ["Failed", websiteCrawl.failedCount ?? 0],
+            ].map(([label, value]) => (
+              <div className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-3" key={label}>
+                <p className="text-lg font-semibold text-white">{value}</p>
+                <p className="text-xs text-slate-500">{label}</p>
+              </div>
+            ))}
+          </div>
+          {!websiteCrawl.coverage?.complete && websiteCrawl.coverage?.reasons?.length ? (
+            <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">
+                Why coverage is limited
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-amber-100/80">
+                {websiteCrawl.coverage.reasons.map((reason) => <li key={reason}>• {reason}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {websiteCrawl.endpoints?.length ? (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Observed endpoint evidence
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {websiteCrawl.endpoints.slice(0, 12).map((endpoint) => (
+                  <code
+                    className="max-w-full truncate rounded border border-cyan-400/15 bg-slate-950/60 px-2 py-1 text-xs text-cyan-200"
+                    key={endpoint.url}
+                    title={endpoint.url}
+                  >
+                    GET {endpoint.url}
+                  </code>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {errorMessage ? (
         <div className="flex items-start gap-2 rounded-md border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">

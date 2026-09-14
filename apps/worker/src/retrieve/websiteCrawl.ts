@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AppError, ErrorCode, websiteCrawlDefaults } from "@ai-archaeologist/shared";
-import { assertPublicWebsiteUrl } from "./assertPublicWebsiteUrl.js";
+import { resolvePublicWebsiteAddress } from "./assertPublicWebsiteUrl.js";
 
 const FETCH_TIMEOUT_MS = 30_000;
 const MAX_BYTES_PER_ASSET = 1_500_000;
@@ -512,7 +514,8 @@ async function fetchResource(
 ): Promise<FetchedResource> {
   let requestUrl = canonicalizeUrl(inputUrl);
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-    const parsed = await assertPublicWebsiteUrl(requestUrl);
+    const resolved = await resolvePublicWebsiteAddress(requestUrl);
+    const parsed = resolved.url;
     if (options.allowedOrigin && parsed.origin !== options.allowedOrigin) {
       throw new AppError({
         code: ErrorCode.InvalidInput,
@@ -524,44 +527,88 @@ async function fetchResource(
     const controller = new AbortController();
     const timeout = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT_MS);
     try {
-      const response = await fetch(parsed.href, {
-        headers: {
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/css,text/javascript,application/javascript;q=0.8,*/*;q=0.5",
-          "User-Agent": USER_AGENT,
-        },
-        method: "GET",
-        redirect: "manual",
-        signal: controller.signal,
-      });
-      const location = response.headers.get("location");
+      const response = await requestResolvedResource(resolved, options.maxBytes, controller);
+      const location = response.headers["location"];
       if (isRedirect(response.status) && location) {
-        await response.body?.cancel();
         requestUrl = canonicalizeUrl(new URL(location, parsed.href).href);
         continue;
       }
-
-      const headers: Record<string, string> = {};
-      response.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
-      const { body, truncated } = await readResponseBody(response, options.maxBytes);
-      const getSetCookie = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
       return {
-        body,
-        contentType: response.headers.get("content-type")?.toLowerCase() ?? "application/octet-stream",
+        body: response.body,
+        contentType: response.headers["content-type"]?.toLowerCase() ?? "application/octet-stream",
         finalUrl: canonicalizeUrl(parsed.href),
-        headers,
-        setCookies: getSetCookie ? getSetCookie.call(response.headers) : splitSetCookie(headers["set-cookie"]),
+        headers: response.headers,
+        setCookies: splitSetCookie(response.headers["set-cookie"]),
         status: response.status,
-        truncated,
+        truncated: response.truncated,
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError({
         code: ErrorCode.ServiceUnavailable,
-        message: error instanceof Error ? error.message.slice(0, 240) : "Website fetch failed.",
+        message: formatFetchError(parsed, error),
         statusCode: 502,
       });
     } finally {
       clearTimeout(timeout);
+    }
+
+    async function requestResolvedResource(
+      resolved: { address: string; family: 4 | 6; url: URL },
+      maxBytes: number,
+      controller: AbortController,
+    ): Promise<{ body: Buffer; headers: Record<string, string>; status: number; truncated: boolean }> {
+      const request = resolved.url.protocol === "https:" ? httpsRequest : httpRequest;
+      return await new Promise((resolve, reject) => {
+        const client = request({
+          family: resolved.family,
+          hostname: resolved.address,
+          path: `${resolved.url.pathname}${resolved.url.search}`,
+          port: resolved.url.port || (resolved.url.protocol === "https:" ? 443 : 80),
+          ...(resolved.url.protocol === "https:" ? { servername: resolved.url.hostname } : {}),
+          headers: {
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/css,text/javascript,application/javascript;q=0.8,*/*;q=0.5",
+            Host: resolved.url.host,
+            "User-Agent": USER_AGENT,
+          },
+          method: "GET",
+          signal: controller.signal,
+        }, (response) => {
+          const headers: Record<string, string> = {};
+          for (const [key, value] of Object.entries(response.headers)) {
+            if (typeof value === "string") headers[key.toLowerCase()] = value;
+            else if (Array.isArray(value)) headers[key.toLowerCase()] = value.join(", ");
+          }
+          const chunks: Buffer[] = [];
+          let total = 0;
+          let truncated = false;
+          response.on("data", (chunk: Buffer) => {
+            if (truncated) return;
+            if (total + chunk.length > maxBytes) {
+              truncated = true;
+              response.destroy();
+              return;
+            }
+            chunks.push(chunk);
+            total += chunk.length;
+          });
+          response.on("end", () => resolve({
+            body: Buffer.concat(chunks),
+            headers,
+            status: response.statusCode ?? 0,
+            truncated,
+          }));
+          response.on("error", reject);
+        });
+        client.on("error", reject);
+        client.end();
+      });
+    }
+
+    function formatFetchError(url: URL, error: unknown): string {
+      if (!(error instanceof Error)) return `Website request failed for ${url.hostname}.`;
+      const cause = error.cause instanceof Error ? ` (${error.cause.message})` : "";
+      return `Website request failed for ${url.hostname}: ${error.message}${cause}`.slice(0, 500);
     }
   }
   throw new AppError({
@@ -569,24 +616,6 @@ async function fetchResource(
     message: `Website exceeded the ${MAX_REDIRECTS}-redirect limit.`,
     statusCode: 400,
   });
-}
-
-async function readResponseBody(response: Response, maxBytes: number): Promise<{ body: Buffer; truncated: boolean }> {
-  if (!response.body) return { body: Buffer.alloc(0), truncated: false };
-  const reader = response.body.getReader();
-  const chunks: Buffer[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) return { body: Buffer.concat(chunks), truncated: false };
-    const chunk = Buffer.from(value);
-    if (total + chunk.length > maxBytes) {
-      await reader.cancel();
-      return { body: Buffer.concat(chunks), truncated: true };
-    }
-    chunks.push(chunk);
-    total += chunk.length;
-  }
 }
 
 function extractNavigableLinks(html: string, baseUrl: string, scopeOrigin: string): {

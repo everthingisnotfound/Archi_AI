@@ -89,7 +89,7 @@ export function PipelinePanel({
       {/* Header */}
       <button
         className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left transition-colors hover:bg-slate-800/50"
-        onClick={() => setExpanded((prev) => !prev)}
+        onClick={() => { setExpanded((prev) => !prev); }}
         type="button"
       >
         <div className="flex items-center gap-2">

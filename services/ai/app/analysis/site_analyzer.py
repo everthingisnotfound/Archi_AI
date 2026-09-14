@@ -100,17 +100,17 @@ def extract_site_edges(profile: dict) -> list[ExtractedEdge]:
                     ExtractedEdge(source_ref=page_path, target_ref=str(form["action"]), edge_type="form_action")
                 )
 
-    # Legacy snapshots carried resources only at profile level.
-    if not pages:
-        for asset in profile.get("assets") or []:
-            if isinstance(asset, dict):
-                edges.append(
-                    ExtractedEdge(
-                        source_ref=start_url,
-                        target_ref=str(asset.get("path") or asset.get("url") or "asset"),
-                        edge_type=str(asset.get("kind") or "asset"),
-                    )
+    # Older snapshots carried resources at profile level. Keep accepting them
+    # even when the profile also contains page records.
+    for asset in profile.get("assets") or []:
+        if isinstance(asset, dict):
+            edges.append(
+                ExtractedEdge(
+                    source_ref=start_url,
+                    target_ref=str(asset.get("path") or asset.get("url") or "asset"),
+                    edge_type=str(asset.get("kind") or "asset"),
                 )
+            )
     for host in profile.get("thirdParties") or []:
         edges.append(ExtractedEdge(source_ref=start_url, target_ref=str(host), edge_type="third_party"))
     return _dedupe_edges(edges)
@@ -128,6 +128,12 @@ def extract_site_findings(profile: dict) -> list[SecretFinding]:
 def _pages(profile: dict) -> list[dict]:
     pages = [page for page in profile.get("pages") or [] if isinstance(page, dict)]
     if pages:
+        first_page = dict(pages[0])
+        if "cookies" not in first_page and profile.get("cookies"):
+            first_page["cookies"] = profile["cookies"]
+        if "securityHeaders" not in first_page and profile.get("securityHeaders"):
+            first_page["securityHeaders"] = profile["securityHeaders"]
+        pages[0] = first_page
         return pages
     # Preserve analysis compatibility with version-one captures.
     return [

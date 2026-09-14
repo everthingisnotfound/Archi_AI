@@ -36,19 +36,15 @@
 - ✅ Re-scan Repository (to check for changes)
 
 ### 📚 Documentation Added
-- ✅ `RAILWAY_DEPLOYMENT.md` - Complete 40-minute setup guide
+- ✅ `RAILWAY_DEPLOYMENT.md` - Service-specific Railway setup guide
 - ✅ `PRODUCTION_READY.md` - Deployment checklist
-- ✅ `Procfile` - For Railway Python detection
+- ✅ `services/ai/Procfile` - AI service start command
 
-## Code Deployed
-All changes pushed to: `https://github.com/everthingisnotfound/Archi_AI`
+## Deployment status
 
-Latest commits:
-- `fb2cbc0` - Production readiness summary
-- `7882d38` - Delete & Re-scan feature
-- `b862edd` - Railway Procfile
-- `f3ec01d` - Railway deployment guide
-- `8b2ea4a` - Crawler & workspace config improvements
+Redeploy all Railway services from the latest `main` commit after configuration or
+build changes. Record the deployed commit before diagnosing logs so stale deployments
+are not mistaken for current failures.
 
 ## Your Next Steps (30-40 minutes)
 
@@ -140,9 +136,10 @@ If anything fails:
 3. Confirm database/redis provisioning
 4. Look for specific error messages
 
-## 🎉 You're Production Ready!
+## Release gate
 
-Your code is solid. All bugs fixed. New features working.
-Just deploy to Railway following the guide and you're live!
+The application is not production-verified until API, worker, AI, and web are healthy
+in Railway and one end-to-end ingestion completes. Follow `RAILWAY_DEPLOYMENT.md`
+for service-specific commands and environment variables.
 
 Questions? Check `RAILWAY_DEPLOYMENT.md` for detailed step-by-step.

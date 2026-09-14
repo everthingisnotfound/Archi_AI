@@ -39,8 +39,8 @@ Go to Railway dashboard → New Project → Add New Service
 
 **Configure:**
 - Service Name: `api`
-- Build Command: `npm run build` (automatic)
-- Start Command: Configure in Railway UI or via `railway.json` (see below)
+- Root Directory: repository root (`/`)
+- Builder: Railpack/Nixpacks
 - Port: `4000`
 
 **Environment Variables** (add in Railway Variables tab):
@@ -72,8 +72,8 @@ WEB_BASE_URL=https://yourdomain.com
 3. Service Name: `worker`
 
 **Configure:**
-- Build Command: Same as API (auto)
-- Start Command: See below
+- Root Directory: repository root (`/`)
+- Builder: Railpack/Nixpacks
 
 **Environment Variables** (same as API):
 ```
@@ -92,6 +92,10 @@ WORKER_CONCURRENCY=2
 - Build: `npm run build --workspace @ai-archaeologist/worker` (builds required workspace packages first)
 - Start: `npm run start --workspace @ai-archaeologist/worker`
 
+Run database migrations from the API deployment only. Do not add a migration command
+to the worker start command; concurrent API and worker migrations can contend for
+Prisma's migration lock.
+
 ### 1d. AI Service
 
 **Create Service:**
@@ -100,8 +104,8 @@ WORKER_CONCURRENCY=2
 3. Service Name: `ai-service`
 
 **Configure:**
-- Build: Create a `Procfile` in root (Railway detects it for Python)
-- Start Command: See below
+- Root Directory: `/services/ai`
+- Builder: Railpack/Nixpacks
 
 **Environment Variables:**
 ```
@@ -111,7 +115,7 @@ OPENAI_API_KEY={your key}
 PORT=8000
 ```
 
-**Set the AI service Root Directory to `/services/ai` and create `services/ai/Procfile`:**
+**The committed `services/ai/Procfile` supplies the AI start command:**
 ```
 web: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
@@ -127,8 +131,8 @@ can make the web/API/worker services inherit the AI command.
 3. Service Name: `web`
 
 **Configure:**
-- Build: `npm run build --workspace @ai-archaeologist/web` (builds config, shared, and UI packages first)
-- Start: `npm run start --workspace @ai-archaeologist/web`
+- Root Directory: repository root (`/`)
+- Builder: Railpack/Nixpacks
 
 **Environment Variables:**
 ```
@@ -191,6 +195,7 @@ docker compose up -d
 # Wait 30s for services to start
 curl http://localhost:4000/healthz  # Should return 200
 curl http://localhost:5173          # Should show web UI
+curl http://localhost:5173/api/auth/csrf  # Should return JSON
 ```
 
 Then test the flow:

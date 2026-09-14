@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "npm run build --workspace @ai-archaeologist/config && npm run build --workspace @ai-archaeologist/shared && npx prisma generate --schema ../../packages/database/prisma/schema.prisma && npm run build --workspace @ai-archaeologist/database",
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",

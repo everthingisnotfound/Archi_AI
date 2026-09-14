@@ -61,7 +61,7 @@ WEB_BASE_URL=https://yourdomain.com
 ```
 
 **Start Command in Railway UI:**
-- Build: `npm run build --workspace @ai-archaeologist/api`
+- Build: `npm run build --workspace @ai-archaeologist/api` (builds required workspace packages first)
 - Start: `npm run start --workspace @ai-archaeologist/api`
 
 ### 1c. Worker Service
@@ -89,7 +89,7 @@ WORKER_CONCURRENCY=2
 ```
 
 **Start Command in Railway UI:**
-- Build: `npm run build --workspace @ai-archaeologist/worker`
+- Build: `npm run build --workspace @ai-archaeologist/worker` (builds required workspace packages first)
 - Start: `npm run start --workspace @ai-archaeologist/worker`
 
 ### 1d. AI Service
@@ -111,10 +111,13 @@ OPENAI_API_KEY={your key}
 PORT=8000
 ```
 
-**Create `Procfile` in repo root:**
+**Set the AI service Root Directory to `/services/ai` and create `services/ai/Procfile`:**
 ```
-web: cd services/ai && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
+
+Do not keep a root-level `Procfile`: Railway applies it while detecting every service, which
+can make the web/API/worker services inherit the AI command.
 
 ### 1e. Web Service
 
@@ -124,7 +127,7 @@ web: cd services/ai && python -m uvicorn app.main:app --host 0.0.0.0 --port $POR
 3. Service Name: `web`
 
 **Configure:**
-- Build: `npm run build --workspace @ai-archaeologist/web`
+- Build: `npm run build --workspace @ai-archaeologist/web` (builds config, shared, and UI packages first)
 - Start: `npm run start --workspace @ai-archaeologist/web`
 
 **Environment Variables:**

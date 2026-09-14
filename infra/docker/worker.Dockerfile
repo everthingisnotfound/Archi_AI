@@ -22,6 +22,7 @@ RUN npm run build --workspace @ai-archaeologist/shared
 RUN npm run build --workspace @ai-archaeologist/database
 RUN npm run build --workspace @ai-archaeologist/worker
 COPY infra/docker/worker-entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 EXPOSE 4100
 ENTRYPOINT ["/entrypoint.sh"]

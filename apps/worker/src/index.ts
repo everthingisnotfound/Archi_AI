@@ -2,6 +2,7 @@ import { parseRedisConnectionOptions } from "@ai-archaeologist/config";
 import { createPrismaClient } from "@ai-archaeologist/database";
 import { deepAnalysisQueueName, analysisQueueName, enrichmentQueueName, ingestionQueueName } from "@ai-archaeologist/shared";
 import { Worker } from "bullmq";
+import { Redis } from "ioredis";
 import { createAnalysisProcessor } from "./analysis/analysisProcessor.js";
 import { createDeepAnalysisProcessor } from "./analysis/deepAnalysisProcessor.js";
 import { createEnrichmentProcessor } from "./analysis/enrichmentProcessor.js";
@@ -17,9 +18,20 @@ const prisma = createPrismaClient(workerConfig.DATABASE_URL);
 const redisConnection = parseRedisConnectionOptions(workerConfig.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
+const healthRedis = new Redis(workerConfig.REDIS_URL, {
+  maxRetriesPerRequest: 1,
+});
 const analysisJobPublisher = new BullMqAnalysisJobPublisher(redisConnection);
 const enrichmentJobPublisher = new BullMqEnrichmentJobPublisher(redisConnection);
-const healthServer = startHealthServer(workerConfig.WORKER_HEALTH_PORT, logger);
+const railwayPort = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : undefined;
+const healthPort =
+  railwayPort && railwayPort > 0 && railwayPort <= 65_535
+    ? railwayPort
+    : workerConfig.WORKER_HEALTH_PORT;
+const healthServer = startHealthServer(healthPort, logger, {
+  prisma,
+  redis: healthRedis,
+});
 
 const ingestionWorker = new Worker(
   ingestionQueueName,
@@ -99,6 +111,7 @@ async function shutdown(signal: string): Promise<void> {
     deepAnalysisWorker.close(),
     analysisJobPublisher.close(),
     enrichmentJobPublisher.close(),
+    healthRedis.quit(),
     prisma.$disconnect(),
   ]);
   process.exit(0);

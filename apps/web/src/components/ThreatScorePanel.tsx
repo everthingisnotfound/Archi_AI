@@ -101,7 +101,7 @@ export function ThreatScorePanel({ findings, ready }: ThreatScorePanelProps): Re
       className="relative overflow-hidden rounded-xl border p-5"
       style={{
         backgroundColor: "rgba(15, 15, 25, 0.9)",
-        borderColor: `${config.glowColor}`,
+        borderColor: config.glowColor,
         boxShadow: `0 0 30px ${config.glowColor.replace('0.5', '0.15')}, inset 0 0 30px ${config.glowColor.replace('0.5', '0.05')}`,
       }}
     >

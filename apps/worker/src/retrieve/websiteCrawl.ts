@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { AppError, ErrorCode, websiteCrawlDefaults } from "@ai-archaeologist/shared";
 import { resolvePublicWebsiteAddress } from "./assertPublicWebsiteUrl.js";
+import { buildAttackSurfaceInventory } from "./attackSurfaceInventory.js";
 
 const FETCH_TIMEOUT_MS = 30_000;
 const MAX_BYTES_PER_ASSET = 1_500_000;
@@ -25,7 +26,7 @@ type FetchedResource = {
 
 type CrawlCandidate = { depth: number; discoveredFrom: string; url: string };
 
-type FormProfile = {
+export type FormProfile = {
   action: string;
   fieldCount: number;
   hasFileInput: boolean;
@@ -33,7 +34,7 @@ type FormProfile = {
   method: string;
 };
 
-type ResourceReference = {
+export type ResourceReference = {
   integrity: boolean;
   kind: "script" | "stylesheet";
   path?: string;
@@ -41,7 +42,7 @@ type ResourceReference = {
   url: string;
 };
 
-type CapturedPage = {
+export type CapturedPage = {
   contentType: string;
   cookies: Array<Record<string, boolean | string>>;
   depth: number;
@@ -60,7 +61,7 @@ type CapturedPage = {
   url: string;
 };
 
-type DiscoveredEndpoint = {
+export type DiscoveredEndpoint = {
   contentType: string;
   method: "GET";
   path: string;
@@ -92,6 +93,29 @@ export type WebsiteCrawlResult = {
   robotsHonored: boolean;
   skippedCount: number;
   startUrl: string;
+};
+
+export type WebsiteCrawlProfile = {
+  assets: Array<{ kind: string; path: string; url: string }>;
+  coverage: { complete: boolean; reasons: string[] };
+  endpoints: DiscoveredEndpoint[];
+  crawl: {
+    discoveredCount: number;
+    failedCount: number;
+    maxDepth: number;
+    maxPages: number;
+    requestDelayMs: number;
+    skippedCount: number;
+  };
+  cookies: Array<Record<string, boolean | string>>;
+  pages: CapturedPage[];
+  robots: RobotsPolicy;
+  scopeOrigin: string;
+  securityHeaders: Record<string, string>;
+  startUrl: string;
+  thirdParties: string[];
+  title: string;
+  version: number;
 };
 
 /**
@@ -209,7 +233,7 @@ export async function crawlPublicWebsite(
   });
   const rootSecurityHeaders = pages[0]?.securityHeaders ?? {};
   const rootCookies = pages[0]?.cookies ?? [];
-  const siteProfile = {
+  const siteProfile: WebsiteCrawlProfile = {
     assets,
     coverage,
     endpoints,
@@ -239,6 +263,10 @@ export async function crawlPublicWebsite(
   await writeBinary(
     path.join(targetDirectory, "_archaeologist", "security-headers.json"),
     Buffer.from(JSON.stringify(rootSecurityHeaders, null, 2), "utf8"),
+  );
+  await writeBinary(
+    path.join(targetDirectory, "_archaeologist", "attack-surface-inventory.json"),
+    Buffer.from(JSON.stringify(buildAttackSurfaceInventory(siteProfile), null, 2), "utf8"),
   );
   await writeBinary(
     path.join(targetDirectory, "_archaeologist", "crawl-observations.json"),
@@ -592,12 +620,12 @@ async function fetchResource(
             chunks.push(chunk);
             total += chunk.length;
           });
-          response.on("end", () => resolve({
+          response.on("end", () => { resolve({
             body: Buffer.concat(chunks),
             headers,
             status: response.statusCode ?? 0,
             truncated,
-          }));
+          }); });
           response.on("error", reject);
         });
         client.on("error", reject);

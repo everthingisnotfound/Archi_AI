@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from openai import AsyncOpenAI
 
-from app.providers.base import CompletionProvider, CompletionRequest, CompletionResponse
+from app.providers.base import CompletionRequest, CompletionResponse
 
 
 class OpenAICompletionProvider:

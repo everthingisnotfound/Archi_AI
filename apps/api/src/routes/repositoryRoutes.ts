@@ -56,6 +56,10 @@ const githubBodySchema = z.object({
 });
 
 const folderDisplayNameSchema = z.string().trim().min(1).max(180);
+const folderMultipartBodySchema = z.object({
+  displayName: z.unknown(),
+  paths: z.unknown(),
+});
 
 function repositoryNameFromGithubUrl(url: string): string {
   const parsed = new URL(url);
@@ -620,9 +624,10 @@ export function createRepositoryRouter(
       const params = organizationParamsSchema.parse(request.params);
       assertOrganizationRole(request.auth, params.organizationId, "DEVELOPER");
 
-      const displayName = folderDisplayNameSchema.parse(request.body.displayName);
+      const multipartBody = folderMultipartBodySchema.parse(request.body);
+      const displayName = folderDisplayNameSchema.parse(multipartBody.displayName);
       const uploadedFiles = request.files;
-      const paths = parseMultipartPaths(request.body.paths);
+      const paths = parseMultipartPaths(multipartBody.paths);
 
       if (!Array.isArray(uploadedFiles) || uploadedFiles.length === 0) {
         throw new AppError({

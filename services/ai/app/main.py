@@ -5,6 +5,14 @@ from typing import Annotated
 
 from fastapi import Body, Depends, FastAPI
 
+from app.analysis.active_engine import ActiveAssessmentEngine
+from app.analysis.active_models import ActiveAssessmentRequest, ActiveAssessmentResponse
+from app.analysis.active_transport import BoundedHttpTransport
+from app.analysis.deep_analysis import (
+    DeepAnalysisRequest,
+    DeepAnalysisResponse,
+    complete_deep_analysis,
+)
 from app.analysis.enrichment import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -16,7 +24,6 @@ from app.analysis.enrichment import (
     embed_text_batch,
     enrich_snapshot,
 )
-from app.analysis.deep_analysis import DeepAnalysisRequest, DeepAnalysisResponse, complete_deep_analysis
 from app.analysis.models import StaticAnalysisRequest, StaticAnalysisResponse
 from app.analysis.static_analyzer import analyze_snapshot
 from app.config import Settings, get_settings
@@ -102,6 +109,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved_settings.internal_job_token_secret.get_secret_value(),
         )
         return await complete_deep_analysis(resolved_settings, body)
+
+    @app.post("/internal/assessment/active")
+    async def internal_active_assessment(
+        body: ActiveAssessmentRequest,
+        token: str = Depends(require_internal_job_token),
+    ) -> ActiveAssessmentResponse:
+        verify_internal_job_token(
+            token,
+            resolved_settings.internal_job_token_secret.get_secret_value(),
+        )
+        transport = BoundedHttpTransport(
+            allowed_hosts=body.allowed_hosts,
+            max_response_bytes=body.budget.max_response_bytes,
+            timeout_seconds=body.budget.timeout_seconds,
+        )
+        return await ActiveAssessmentEngine(transport).assess(body)
 
     return app
 

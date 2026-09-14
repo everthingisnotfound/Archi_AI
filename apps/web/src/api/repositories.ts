@@ -155,3 +155,20 @@ export function createZipRepository(input: { archive: File; organizationId: stri
     schema: repositoryCreateResponseSchema,
   });
 }
+
+export function deleteRepository(repositoryId: string) {
+  return apiRequest(`/repositories/${repositoryId}`, {
+    method: "DELETE",
+    schema: z.undefined(),
+  });
+}
+
+export function reScanRepository(repositoryId: string) {
+  return apiRequest(`/repositories/${repositoryId}/re-scan`, {
+    body: JSON.stringify({}),
+    method: "POST",
+    schema: z.object({
+      ingestionJobId: z.string().uuid(),
+    }),
+  });
+}

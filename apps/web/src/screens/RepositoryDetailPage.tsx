@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, FileCode2, FolderTree, Loader2, RotateCcw, ScanSearch, ShieldAlert } from "lucide-react";
-import { Link, Navigate, useOutletContext, useParams } from "react-router-dom";
+import { ArrowLeft, FileCode2, FolderTree, Loader2, RefreshCw, RotateCcw, ScanSearch, ShieldAlert, Trash2 } from "lucide-react";
+import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { Badge, Button } from "@ai-archaeologist/ui";
 import type { AuthResponse } from "../api/schemas.js";
 import {
+  deleteRepository,
   getIngestionJob,
   getRepository,
   getSnapshotGraph,
   listSnapshotDocuments,
   listSnapshotFiles,
   listSnapshotFindings,
+  reScanRepository,
   requestDeepAnalysis,
   retryAnalysis,
 } from "../api/repositories.js";
@@ -32,6 +34,7 @@ export function RepositoryDetailPage(): React.JSX.Element {
   const { repositoryId = "" } = useParams();
   const { me } = useOutletContext<ShellContext>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [deepQueuedAt, setDeepQueuedAt] = useState<number | null>(null);
 
   const repositoryQuery = useQuery({
@@ -108,6 +111,20 @@ export function RepositoryDetailPage(): React.JSX.Element {
     mutationFn: () => retryAnalysis(repositoryId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["repository", repositoryId] });
+    },
+  });
+
+  const reScanMutation = useMutation({
+    mutationFn: () => reScanRepository(repositoryId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["repository", repositoryId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteRepository(repositoryId),
+    onSuccess: async () => {
+      navigate("/");
     },
   });
 
@@ -201,6 +218,30 @@ export function RepositoryDetailPage(): React.JSX.Element {
               {deepDocument ? "Regenerate briefing" : "Threat briefing"}
             </Button>
           ) : null}
+          <Button
+            disabled={reScanMutation.isPending || latestJob?.status === "RUNNING"}
+            onClick={() => { reScanMutation.mutate(); }}
+            type="button"
+            variant="outline"
+            title="Re-scan to check for changes"
+          >
+            <RefreshCw aria-hidden="true" size={16} />
+            Re-scan
+          </Button>
+          <Button
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (window.confirm("Are you sure you want to delete this repository? This action cannot be undone.")) {
+                deleteMutation.mutate();
+              }
+            }}
+            type="button"
+            variant="outline"
+            title="Delete repository"
+          >
+            <Trash2 aria-hidden="true" size={16} />
+            Delete
+          </Button>
           {repositoryQuery.isFetching || jobQuery.isFetching ? (
             <Loader2 aria-hidden="true" className="animate-spin text-slate-400" size={18} />
           ) : null}
@@ -218,6 +259,20 @@ export function RepositoryDetailPage(): React.JSX.Element {
         <div className="flex items-start gap-2 rounded-md border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
           <ShieldAlert aria-hidden="true" className="mt-0.5 shrink-0" size={16} />
           <span>{retryAnalysisMutation.error.message}</span>
+        </div>
+      ) : null}
+
+      {reScanMutation.error instanceof Error ? (
+        <div className="flex items-start gap-2 rounded-md border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+          <ShieldAlert aria-hidden="true" className="mt-0.5 shrink-0" size={16} />
+          <span>{reScanMutation.error.message}</span>
+        </div>
+      ) : null}
+
+      {deleteMutation.error instanceof Error ? (
+        <div className="flex items-start gap-2 rounded-md border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+          <ShieldAlert aria-hidden="true" className="mt-0.5 shrink-0" size={16} />
+          <span>{deleteMutation.error.message}</span>
         </div>
       ) : null}
 

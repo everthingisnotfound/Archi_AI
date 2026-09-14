@@ -773,5 +773,150 @@ export function createRepositoryRouter(
     }),
   );
 
+  router.delete(
+    "/repositories/:repositoryId",
+    asyncHandler(async (request, response) => {
+      const params = repositoryIdParamsSchema.parse(request.params);
+      const repository = await loadRepositoryForOrganization(
+        prisma,
+        request.auth,
+        params.repositoryId,
+        "DEVELOPER",
+      );
+
+      await prisma.$transaction(async (transaction) => {
+        await transaction.analysisRun.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.document.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.finding.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.diagram.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.metric.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.symbol.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.dependencyEdge.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.fileNode.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.repositorySnapshot.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.ingestionJob.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.repositorySource.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.repository.delete({
+          where: { id: repository.id },
+        });
+      });
+
+      await recordAuditEvent(prisma, request, {
+        action: "repository.delete",
+        organizationId: repository.organizationId,
+        resourceId: repository.id,
+        resourceType: "Repository",
+        userId: request.auth?.user.id,
+      });
+
+      response.status(204).send();
+    }),
+  );
+
+  router.post(
+    "/repositories/:repositoryId/re-scan",
+    asyncHandler(async (request, response) => {
+      const params = repositoryIdParamsSchema.parse(request.params);
+      const repository = await loadRepositoryForOrganization(
+        prisma,
+        request.auth,
+        params.repositoryId,
+        "DEVELOPER",
+      );
+
+      const latestSource = await prisma.repositorySource.findFirst({
+        orderBy: { createdAt: "desc" },
+        where: { repositoryId: repository.id },
+      });
+
+      if (!latestSource) {
+        throw new AppError({
+          code: ErrorCode.InvalidInput,
+          message: "No source found for this repository.",
+          statusCode: 400,
+        });
+      }
+
+      await prisma.$transaction(async (transaction) => {
+        await transaction.analysisRun.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.document.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.finding.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.diagram.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.metric.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.symbol.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.dependencyEdge.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.fileNode.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.repositorySnapshot.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        await transaction.ingestionJob.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+      });
+
+      const newIngestionJob = await prisma.ingestionJob.create({
+        data: {
+          organizationId: repository.organizationId,
+          repositoryId: repository.id,
+          sourceId: latestSource.id,
+        },
+      });
+
+      await jobPublisher.enqueueIngestion({
+        ingestionJobId: newIngestionJob.id,
+        organizationId: repository.organizationId,
+        repositoryId: repository.id,
+      });
+
+      await recordAuditEvent(prisma, request, {
+        action: "repository.re-scan",
+        organizationId: repository.organizationId,
+        resourceId: repository.id,
+        resourceType: "Repository",
+        userId: request.auth?.user.id,
+      });
+
+      response.status(202).json({ ingestionJobId: newIngestionJob.id });
+    }),
+  );
+
   return router;
 }

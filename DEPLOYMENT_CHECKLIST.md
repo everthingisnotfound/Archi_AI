@@ -38,7 +38,7 @@
 ### 📚 Documentation Added
 - ✅ `RAILWAY_DEPLOYMENT.md` - Service-specific Railway setup guide
 - ✅ `PRODUCTION_READY.md` - Deployment checklist
-- ✅ `services/ai/Procfile` - AI service start command
+- ✅ Service-local `railway.json` files - explicit build/start/health settings
 
 ## Deployment status
 

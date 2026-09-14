@@ -41,6 +41,7 @@ Go to Railway dashboard → New Project → Add New Service
 - Service Name: `api`
 - Root Directory: repository root (`/`)
 - Builder: Railpack/Nixpacks
+- Config-as-code path: `/apps/api/railway.json`
 - Port: `4000`
 
 **Environment Variables** (add in Railway Variables tab):
@@ -74,6 +75,7 @@ WEB_BASE_URL=https://yourdomain.com
 **Configure:**
 - Root Directory: repository root (`/`)
 - Builder: Railpack/Nixpacks
+- Config-as-code path: `/apps/worker/railway.json`
 
 **Environment Variables** (same as API):
 ```
@@ -106,6 +108,7 @@ Prisma's migration lock.
 **Configure:**
 - Root Directory: `/services/ai`
 - Builder: Railpack/Nixpacks
+- Config-as-code path: `/services/ai/railway.json`
 
 **Environment Variables:**
 ```
@@ -115,13 +118,8 @@ OPENAI_API_KEY={your key}
 PORT=8000
 ```
 
-**The committed `services/ai/Procfile` supplies the AI start command:**
-```
-web: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Do not keep a root-level `Procfile`: Railway applies it while detecting every service, which
-can make the web/API/worker services inherit the AI command.
+The committed `/services/ai/railway.json` supplies the AI build and start commands.
+No Procfile is required.
 
 ### 1e. Web Service
 
@@ -133,6 +131,7 @@ can make the web/API/worker services inherit the AI command.
 **Configure:**
 - Root Directory: repository root (`/`)
 - Builder: Railpack/Nixpacks
+- Config-as-code path: `/apps/web/railway.json`
 
 **Environment Variables:**
 ```
@@ -157,22 +156,82 @@ Web requires `VITE_API_BASE_URL` at build time.
 use the AI service's actual Railway private hostname, not `http://ai:8000` unless that is the
 private DNS name in your project.
 
-## Step 2: Create railway.json (Optional but Recommended)
+## Step 2: Use the committed service configuration
 
-Create file: `railway.json` in root:
+Each service has its own `railway.json` with explicit build, start, health-check, and
+restart settings. If Railway does not discover a service-local file automatically, set
+the Config-as-code file path shown in Step 1. Do not create a root-level Procfile.
 
-```json
-{
-  "build": {
-    "builder": "nixpacks",
-    "config": {
-      "nixpacks": {
-        "providers": ["nodejs", "python"]
-      }
-    }
-  }
-}
+## Fresh Railway deployment
+
+Create a new Railway project from `everthingisnotfound/Archi_AI`, add PostgreSQL and
+Redis, then create four services from the same repository:
+
+| Service | Root Directory | Config-as-code path |
+|---|---|---|
+| API | `/` | `/apps/api/railway.json` |
+| Worker | `/` | `/apps/worker/railway.json` |
+| AI | `/services/ai` | `/services/ai/railway.json` |
+| Web | `/` | `/apps/web/railway.json` |
+
+API, worker, and web must stay rooted at `/`; their `file:../../packages/*` dependencies
+cannot be installed from an `apps/*` root. Deploy after saving each service's settings,
+then verify the build log uses the configured workspace command and not a Procfile.
+
+### Fresh deployment environment variables
+
+Create the following variables on the indicated service. Railway reference variables
+are preferable to copying credentials manually:
+
+**API**
+```text
+NODE_ENV=production
+PORT=${{PORT}}
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+SESSION_SECRET=<new-random-secret-at-least-32-characters>
+INTERNAL_JOB_TOKEN_SECRET=<one-new-random-secret-shared-by-api-worker-ai>
+AI_SERVICE_URL=http://${{ai-service.RAILWAY_PRIVATE_DOMAIN}}:8000
+CORS_ORIGIN=https://<web-public-domain>
+API_BASE_URL=https://<api-public-domain>
+WEB_BASE_URL=https://<web-public-domain>
+WORKSPACE_ROOT=/tmp/workspaces
 ```
+
+**Worker**
+```text
+NODE_ENV=production
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+INTERNAL_JOB_TOKEN_SECRET=<exactly-the-api-value>
+AI_SERVICE_URL=http://${{ai-service.RAILWAY_PRIVATE_DOMAIN}}:8000
+WORKSPACE_ROOT=/tmp/workspaces
+WORKER_CONCURRENCY=2
+```
+
+**AI**
+```text
+PORT=${{PORT}}
+AI_PROVIDER=groq
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+INTERNAL_JOB_TOKEN_SECRET=<exactly-the-api-value>
+GROQ_API_KEY=<new-rotated-key>
+GROQ_MODEL=openai/gpt-oss-120b
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+WORKSPACE_ROOT=/tmp/workspaces
+```
+
+**Web**
+```text
+NODE_ENV=production
+VITE_API_BASE_URL=https://<api-public-domain>
+```
+
+`VITE_API_BASE_URL` must exist before the web deployment starts; changing it later
+requires a new web deployment. Replace `<...>` values with the generated Railway
+domains. Do not paste secrets into git or reuse credentials previously exposed in chat.
 
 ## Step 3: Configure Networking
 

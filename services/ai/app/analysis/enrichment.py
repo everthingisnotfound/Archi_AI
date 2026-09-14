@@ -307,10 +307,8 @@ async def complete_chat(settings: Settings, request: ChatCompletionRequest) -> C
 
     provider = create_completion_provider(settings)
     context = "\n\n".join(
-        (
-            f"[{chunk.path}:{chunk.start_line}-{chunk.end_line}]\n{chunk.text[:2000]}"
-            for chunk in request.context_chunks
-        )
+        f"[{chunk.path}:{chunk.start_line}-{chunk.end_line}]\n{chunk.text[:2000]}"
+        for chunk in request.context_chunks
     ) or "No retrieved code context was available."
 
     try:

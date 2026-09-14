@@ -9,7 +9,6 @@ from pathlib import Path
 import networkx as nx
 from tree_sitter import Node
 
-from app.analysis.site_analyzer import extract_site_edges, load_site_profile
 from app.analysis.models import (
     ExtractedChunk,
     ExtractedEdge,
@@ -17,6 +16,7 @@ from app.analysis.models import (
     StaticAnalysisRequest,
     StaticAnalysisResponse,
 )
+from app.analysis.site_analyzer import extract_site_edges, load_site_profile
 
 MAX_READ_BYTES = 10_485_760
 MAX_CHUNK_LINES = 240

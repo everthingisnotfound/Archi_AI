@@ -10,16 +10,15 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.analysis.models import SnapshotFileDescriptor
 from app.analysis.threat_briefing import (
     ThreatBriefingEdge,
     ThreatBriefingFinding,
     ThreatBriefingRequest,
-    ThreatBriefingResponse,
     ThreatBriefingSymbol,
     generate_threat_briefing,
 )
 from app.config import Settings
-from app.analysis.models import SnapshotFileDescriptor
 
 
 # Keep the original alias-based field names so the worker client doesn't need changes.
@@ -78,7 +77,6 @@ def _parse_site_profile(raw: str) -> dict | None:
 
 async def complete_deep_analysis(settings: Settings, request: DeepAnalysisRequest) -> DeepAnalysisResponse:
     """Generate the Threat Intelligence Briefing for a snapshot."""
-    site_profile = _parse_site_profile(request.site_profile_json)
 
     # Map the flat graph_edges list from the worker into ThreatBriefingEdge objects
     briefing_edges = [

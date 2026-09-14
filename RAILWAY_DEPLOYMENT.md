@@ -62,7 +62,7 @@ WEB_BASE_URL=https://yourdomain.com
 
 **Start Command in Railway UI:**
 - Build: `npm run build --workspace @ai-archaeologist/api`
-- Start: `node apps/api/dist/server.js`
+- Start: `npm run start --workspace @ai-archaeologist/api`
 
 ### 1c. Worker Service
 
@@ -90,7 +90,7 @@ WORKER_CONCURRENCY=2
 
 **Start Command in Railway UI:**
 - Build: `npm run build --workspace @ai-archaeologist/worker`
-- Start: `node apps/worker/dist/index.js`
+- Start: `npm run start --workspace @ai-archaeologist/worker`
 
 ### 1d. AI Service
 
@@ -125,13 +125,30 @@ web: cd services/ai && python -m uvicorn app.main:app --host 0.0.0.0 --port $POR
 
 **Configure:**
 - Build: `npm run build --workspace @ai-archaeologist/web`
-- Start: `npm run preview --workspace @ai-archaeologist/web` or configure nginx
+- Start: `npm run start --workspace @ai-archaeologist/web`
 
 **Environment Variables:**
 ```
 NODE_ENV=production
 VITE_API_BASE_URL=https://api.yourdomain.com
 ```
+
+`VITE_API_BASE_URL` is embedded during the web build. Set it before deploying; the frontend
+cannot reach an API on a different Railway domain when it is omitted. Never use `npm run dev`
+in Railway. After deployment, the HTML must reference `/assets/index-*.js` and must not reference
+`/@vite/client` or `/src/main.tsx`.
+
+### Railway service variable minimums
+
+The AI variables alone are not enough. API requires `DATABASE_URL`, `REDIS_URL`,
+`SESSION_SECRET`, `INTERNAL_JOB_TOKEN_SECRET`, `CORS_ORIGIN`, and `AI_SERVICE_URL`.
+Worker requires `DATABASE_URL`, `REDIS_URL`, `INTERNAL_JOB_TOKEN_SECRET`, and `AI_SERVICE_URL`.
+AI requires `INTERNAL_JOB_TOKEN_SECRET`, `GROQ_API_KEY`, `AI_PROVIDER`, and `PORT`.
+Web requires `VITE_API_BASE_URL` at build time.
+
+`INTERNAL_JOB_TOKEN_SECRET` must be identical on API, worker, and AI. `AI_SERVICE_URL` must
+use the AI service's actual Railway private hostname, not `http://ai:8000` unless that is the
+private DNS name in your project.
 
 ## Step 2: Create railway.json (Optional but Recommended)
 

@@ -14,7 +14,7 @@ export const workerConfig = loadEnv({
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
   WORKER_CONCURRENCY: intEnv(2),
   WORKER_HEALTH_PORT: intEnv(4100),
-  WORKSPACE_ROOT: z.string().min(1).default("./data/workspaces"),
+  WORKSPACE_ROOT: z.string().min(1).default(process.env.NODE_ENV === "production" ? "/tmp/workspaces" : "./data/workspaces"),
   AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
   INTERNAL_JOB_TOKEN_SECRET: z.string().min(32),
   WEBSITE_CRAWL_MAX_ASSETS: intEnv(websiteCrawlDefaults.maxAssets),

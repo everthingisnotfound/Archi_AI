@@ -20,7 +20,7 @@ export const apiConfig = loadEnv({
   SESSION_COOKIE_NAME: z.string().min(1).default("asa_session"),
   SESSION_SECRET: z.string().min(32),
   AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
-  WORKSPACE_ROOT: z.string().min(1).default("./data/workspaces"),
+  WORKSPACE_ROOT: z.string().min(1).default(process.env.NODE_ENV === "production" ? "/tmp/workspaces" : "./data/workspaces"),
 });
 
 export type ApiConfig = typeof apiConfig;

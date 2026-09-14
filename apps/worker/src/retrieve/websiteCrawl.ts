@@ -4,12 +4,12 @@ import path from "node:path";
 import { AppError, ErrorCode, websiteCrawlDefaults } from "@ai-archaeologist/shared";
 import { assertPublicWebsiteUrl } from "./assertPublicWebsiteUrl.js";
 
-const FETCH_TIMEOUT_MS = 15_000;
+const FETCH_TIMEOUT_MS = 30_000;
 const MAX_BYTES_PER_ASSET = 1_500_000;
 const MAX_BYTES_PER_PAGE = 1_500_000;
 const MAX_REDIRECTS = 5;
 const MAX_ROBOTS_BYTES = 200_000;
-const USER_AGENT = "ArchiAI-Public-Site-Assessment/1.0 (+https://archi-ai.example/assessment-policy)";
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 type FetchedResource = {
   body: Buffer;

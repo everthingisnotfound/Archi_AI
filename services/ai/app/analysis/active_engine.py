@@ -6,6 +6,8 @@ import asyncio
 from collections.abc import Iterable
 from urllib.parse import urlparse
 
+import httpx
+
 from .active_detectors import (
     detect_path_traversal,
     detect_rate_limit,
@@ -102,13 +104,25 @@ class ActiveAssessmentEngine:
                     diff = response_difference(baseline, response)
                     findings.extend(_findings(endpoint, probe, diff))
                 return findings
-            except (_BudgetExhausted, TimeoutError):
+            except (TimeoutError, _BudgetExhausted, httpx.HTTPError, OSError, ValueError):
                 return []
 
-        results = await asyncio.wait_for(
-            asyncio.gather(*(one(endpoint) for endpoint in endpoints)),
-            timeout=budget.max_duration_seconds,
-        )
+        tasks = [asyncio.create_task(one(endpoint)) for endpoint in endpoints]
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks),
+                timeout=budget.max_duration_seconds,
+            )
+        except TimeoutError:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            results = [
+                task.result()
+                for task in tasks
+                if task.done() and not task.cancelled() and task.exception() is None
+            ]
         return ActiveAssessmentResponse(
             findings=[finding for group in results for finding in group],
             requests_made=counter,

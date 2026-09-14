@@ -98,7 +98,7 @@ def test_findings_expose_lifecycle_confidence_and_correlated_evidence():
     assert reflection.category == "security"
     assert reflection.detection_method
     assert reflection.evidence_correlation.correlated is True
-    assert reflection.evidence_correlation.independent_signals >= 2
+    assert reflection.evidence_correlation.independent_signals == 1
 
     throttling = next(finding for finding in result.findings if finding.detector == "rate_limit")
     assert throttling.category == "informational"

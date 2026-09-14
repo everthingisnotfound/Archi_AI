@@ -99,7 +99,7 @@ def finding_for(
         ],
         evidence_correlation=EvidenceCorrelation(
             correlated=True,
-            independent_signals=2,
-            rationale="Probe response differs from the endpoint baseline.",
+            independent_signals=1,
+            rationale="The probe response differs from the endpoint baseline; no independent corroborating probe was performed.",
         ),
     )

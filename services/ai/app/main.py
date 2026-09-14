@@ -122,6 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         transport = BoundedHttpTransport(
             allowed_hosts=body.allowed_hosts,
             max_response_bytes=body.budget.max_response_bytes,
+            timeout_seconds=body.budget.timeout_seconds,
         )
         return await ActiveAssessmentEngine(transport).assess(body)
 

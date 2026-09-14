@@ -25,16 +25,24 @@ TransportFactory = Callable[[], ActiveTransport]
 class BoundedHttpTransport:
     """HTTP transport limited to the engine's safe GET/HEAD probe contract."""
 
-    def __init__(self, allowed_hosts: set[str], max_response_bytes: int) -> None:
+    def __init__(
+        self,
+        allowed_hosts: set[str],
+        max_response_bytes: int,
+        timeout_seconds: float = 5,
+    ) -> None:
         self._allowed_hosts = {
             host.lower().rstrip(".") for host in allowed_hosts
         }
         self._max_response_bytes = max_response_bytes
+        self._timeout_seconds = timeout_seconds
 
     async def send(self, endpoint: ActiveEndpoint, probe: ProbeKind) -> ActiveResponse:
         method = endpoint.method.upper()
         if method not in {"GET", "HEAD"}:
             raise ValueError("active validation only permits GET and HEAD requests")
+        if endpoint.body is not None:
+            raise ValueError("active validation does not permit request bodies for GET and HEAD")
 
         url = self._probe_url(str(endpoint.url), probe)
         parsed = urlsplit(url)
@@ -52,7 +60,7 @@ class BoundedHttpTransport:
         cookies = endpoint.cookies or None
         async with httpx.AsyncClient(
             follow_redirects=False,
-            timeout=10,
+            timeout=self._timeout_seconds,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=5),
         ) as client:
             async with client.stream(

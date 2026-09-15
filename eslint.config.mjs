@@ -9,6 +9,8 @@ export default [
       "**/coverage/**",
       "**/node_modules/**",
       "services/ai/**",
+      "**/*.cjs",
+      "**/*.mjs",
     ],
   },
   js.configs.recommended,
@@ -48,4 +50,3 @@ export default [
     },
   },
 ];
-

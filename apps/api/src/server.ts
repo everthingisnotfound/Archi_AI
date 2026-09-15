@@ -26,15 +26,19 @@ const server = app.listen(apiConfig.PORT, () => {
 
 function shutdown(signal: string): void {
   logger.info({ signal }, "api shutting down");
-  server.close(async () => {
-    await Promise.all([prisma.$disconnect(), redis.quit(), jobPublisher.close()]);
-    process.exit(0);
+  server.close(() => {
+    void closeResources();
   });
 }
 
+async function closeResources(): Promise<void> {
+  await Promise.all([prisma.$disconnect(), redis.quit(), jobPublisher.close()]);
+  process.exit(0);
+}
+
 process.on("SIGINT", () => {
-  void shutdown("SIGINT");
+  shutdown("SIGINT");
 });
 process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
+  shutdown("SIGTERM");
 });

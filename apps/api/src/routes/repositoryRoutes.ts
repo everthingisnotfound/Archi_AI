@@ -9,6 +9,9 @@ import {
   repositoryIdParamsSchema,
   repositoryNameFromWebsiteUrl,
   websiteRepositoryRequestSchema,
+  type AnalysisJobPayload,
+  type DeepAnalysisJobPayload,
+  type IngestionJobPayload,
 } from "@ai-archaeologist/shared";
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -56,6 +59,72 @@ const githubBodySchema = z.object({
 });
 
 const folderDisplayNameSchema = z.string().trim().min(1).max(180);
+const folderMultipartBodySchema = z.object({
+  displayName: z.unknown(),
+  paths: z.unknown(),
+});
+
+async function enqueueIngestionOrMarkFailed(
+  prisma: PrismaClient,
+  publisher: JobPublisher,
+  payload: IngestionJobPayload,
+): Promise<void> {
+  try {
+    await publisher.enqueueIngestion(payload);
+  } catch (error) {
+    await prisma.ingestionJob.update({
+      data: {
+        completedAt: new Date(),
+        failureCode: "QUEUE_ENQUEUE_FAILED",
+        failureMessage:
+          error instanceof Error ? error.message.slice(0, 500) : "Queue insertion failed.",
+        status: "FAILED",
+      },
+      where: { id: payload.ingestionJobId },
+    });
+    throw error;
+  }
+}
+
+async function enqueueAnalysisOrMarkFailed(
+  prisma: PrismaClient,
+  publisher: JobPublisher,
+  payload: AnalysisJobPayload,
+): Promise<void> {
+  try {
+    await publisher.enqueueAnalysis(payload);
+  } catch (error) {
+    await prisma.analysisRun.update({
+      data: {
+        completedAt: new Date(),
+        stage: "FAILED",
+        status: "FAILED",
+      },
+      where: { id: payload.analysisRunId },
+    });
+    throw error;
+  }
+}
+
+async function enqueueDeepAnalysisOrMarkFailed(
+  prisma: PrismaClient,
+  publisher: JobPublisher,
+  payload: DeepAnalysisJobPayload,
+): Promise<void> {
+  try {
+    await publisher.enqueueDeepAnalysis(payload);
+  } catch (error) {
+    await prisma.analysisRun.update({
+      data: {
+        completedAt: new Date(),
+        stage: "FAILED",
+        status: "FAILED",
+      },
+      where: { id: payload.analysisRunId },
+    });
+    throw error;
+  }
+}
 
 function repositoryNameFromGithubUrl(url: string): string {
   const parsed = new URL(url);
@@ -401,40 +470,44 @@ export function createRepositoryRouter(
       assertOrganizationRole(request.auth, params.organizationId, "DEVELOPER");
 
       const repositoryName = repositoryNameFromGithubUrl(body.url);
-      let result: { ingestionJob: { id: string }; repository: { id: string }; source: { id: string } };
+      let result: {
+        ingestionJob: { id: string };
+        repository: { id: string };
+        source: { id: string };
+      };
       try {
         result = await prisma.$transaction(async (transaction) => {
-        const repository = await transaction.repository.create({
-          data: {
-            name: repositoryName,
-            organizationId: params.organizationId,
-          },
-        });
-        const source = await transaction.repositorySource.create({
-          data: {
-            metadata: {
-              normalizedUrl: body.url,
+          const repository = await transaction.repository.create({
+            data: {
+              name: repositoryName,
+              organizationId: params.organizationId,
             },
-            organizationId: params.organizationId,
-            repositoryId: repository.id,
-            type: "GITHUB",
-            uri: body.url,
-          },
+          });
+          const source = await transaction.repositorySource.create({
+            data: {
+              metadata: {
+                normalizedUrl: body.url,
+              },
+              organizationId: params.organizationId,
+              repositoryId: repository.id,
+              type: "GITHUB",
+              uri: body.url,
+            },
+          });
+          const ingestionJob = await transaction.ingestionJob.create({
+            data: {
+              organizationId: params.organizationId,
+              repositoryId: repository.id,
+              sourceId: source.id,
+            },
+          });
+          return { ingestionJob, repository, source };
         });
-        const ingestionJob = await transaction.ingestionJob.create({
-          data: {
-            organizationId: params.organizationId,
-            repositoryId: repository.id,
-            sourceId: source.id,
-          },
-        });
-        return { ingestionJob, repository, source };
-      });
       } catch (error) {
         conflictIfDuplicateName(error, repositoryName);
       }
 
-      await jobPublisher.enqueueIngestion({
+      await enqueueIngestionOrMarkFailed(prisma, jobPublisher, {
         ingestionJobId: result.ingestionJob.id,
         organizationId: params.organizationId,
         repositoryId: result.repository.id,
@@ -455,7 +528,9 @@ export function createRepositoryRouter(
     "/organizations/:organizationId/repositories/website",
     asyncHandler(async (request, response) => {
       const params = organizationParamsSchema.parse(request.params);
-      const body = websiteRepositoryRequestSchema.omit({ organizationId: true }).parse(request.body);
+      const body = websiteRepositoryRequestSchema
+        .omit({ organizationId: true })
+        .parse(request.body);
       parsePublicHttpUrl(body.url);
       assertOrganizationRole(request.auth, params.organizationId, "DEVELOPER");
 
@@ -493,7 +568,7 @@ export function createRepositoryRouter(
         return { ingestionJob, repository, source };
       });
 
-      await jobPublisher.enqueueIngestion({
+      await enqueueIngestionOrMarkFailed(prisma, jobPublisher, {
         ingestionJobId: result.ingestionJob.id,
         organizationId: params.organizationId,
         repositoryId: result.repository.id,
@@ -538,7 +613,7 @@ export function createRepositoryRouter(
         });
       }
 
-      await jobPublisher.enqueueDeepAnalysis({
+      await enqueueDeepAnalysisOrMarkFailed(prisma, jobPublisher, {
         analysisRunId: analysisRun.id,
         organizationId: repository.organizationId,
         repositoryId: repository.id,
@@ -592,7 +667,7 @@ export function createRepositoryRouter(
         where: { id: analysisRun.id },
       });
 
-      await jobPublisher.enqueueAnalysis({
+      await enqueueAnalysisOrMarkFailed(prisma, jobPublisher, {
         analysisRunId: analysisRun.id,
         organizationId: repository.organizationId,
         repositoryId: repository.id,
@@ -620,9 +695,10 @@ export function createRepositoryRouter(
       const params = organizationParamsSchema.parse(request.params);
       assertOrganizationRole(request.auth, params.organizationId, "DEVELOPER");
 
-      const displayName = folderDisplayNameSchema.parse(request.body.displayName);
+      const multipartBody = folderMultipartBodySchema.parse(request.body);
+      const displayName = folderDisplayNameSchema.parse(multipartBody.displayName);
       const uploadedFiles = request.files;
-      const paths = parseMultipartPaths(request.body.paths);
+      const paths = parseMultipartPaths(multipartBody.paths);
 
       if (!Array.isArray(uploadedFiles) || uploadedFiles.length === 0) {
         throw new AppError({
@@ -691,7 +767,7 @@ export function createRepositoryRouter(
         })),
       );
 
-      await jobPublisher.enqueueIngestion({
+      await enqueueIngestionOrMarkFailed(prisma, jobPublisher, {
         ingestionJobId: result.ingestionJob.id,
         organizationId: params.organizationId,
         repositoryId: result.repository.id,
@@ -758,7 +834,7 @@ export function createRepositoryRouter(
       await ensureWorkspaceRoot(config.WORKSPACE_ROOT);
       await writeZipArchive(config.WORKSPACE_ROOT, result.source.id, archive.buffer);
 
-      await jobPublisher.enqueueIngestion({
+      await enqueueIngestionOrMarkFailed(prisma, jobPublisher, {
         ingestionJobId: result.ingestionJob.id,
         organizationId: params.organizationId,
         repositoryId: result.repository.id,
@@ -902,7 +978,7 @@ export function createRepositoryRouter(
         },
       });
 
-      await jobPublisher.enqueueIngestion({
+      await enqueueIngestionOrMarkFailed(prisma, jobPublisher, {
         ingestionJobId: newIngestionJob.id,
         organizationId: repository.organizationId,
         repositoryId: repository.id,

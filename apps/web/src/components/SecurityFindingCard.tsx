@@ -54,7 +54,7 @@ export function SecurityFindingCard({ finding }: { finding: Finding }): React.JS
       whileHover={{ scale: 1.01 }}
       className="group relative overflow-hidden rounded-lg border p-4 text-sm transition-all duration-300"
       style={{
-        backgroundColor: `${severityConfig.glowColor.replace('0.3', '0.05')}`,
+        backgroundColor: severityConfig.glowColor.replace('0.3', '0.05'),
         borderColor: severityConfig.borderColor,
         boxShadow: `0 0 15px ${severityConfig.glowColor}`,
       }}

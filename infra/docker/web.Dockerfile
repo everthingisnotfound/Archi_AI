@@ -21,6 +21,7 @@ RUN npm run build --workspace @ai-archaeologist/ui
 RUN npm run build --workspace @ai-archaeologist/web
 
 FROM nginx:1.27-alpine
+RUN mkdir -p /var/lib/archaeologist/workspaces && chmod 755 /var/lib/archaeologist/workspaces
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 COPY infra/nginx/web.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

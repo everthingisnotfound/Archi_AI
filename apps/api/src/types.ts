@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-namespace -- Express module augmentation requires namespace syntax */
 import type { MembershipRole } from "@ai-archaeologist/shared";
 
 export type AuthMembership = {
@@ -15,7 +16,6 @@ export type AuthContext = {
   memberships: AuthMembership[];
 };
 
-// eslint-disable-next-line @typescript-eslint/no-namespace -- module augmentation requires namespace syntax
 declare global {
   namespace Express {
     interface Request {
@@ -24,4 +24,3 @@ declare global {
     }
   }
 }
-

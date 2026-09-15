@@ -33,10 +33,9 @@ export function createApiApp(dependencies: ApiDependencies): express.Express {
   app.disable("x-powered-by");
   app.set("trust proxy", config.NODE_ENV === "production" ? 1 : false);
 
- app.use(helmet());
+  app.use(helmet());
 
-  // 1. Just grab the array directly since it's already string[]
-  const allowedOrigins: string[] = config.CORS_ORIGIN || [];
+  const allowedOrigins = config.CORS_ORIGIN;
 
   app.use(
     cors({
@@ -46,7 +45,7 @@ export function createApiApp(dependencies: ApiDependencies): express.Express {
         if (!requestOrigin || allowedOrigins.includes(requestOrigin)) {
           callback(null, true);
         } else {
-          callback(null, false); // Safer than throwing an unhandled Error
+          callback(null, false);
         }
       },
     }),

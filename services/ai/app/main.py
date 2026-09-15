@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated
+from urllib.parse import urlparse
 
-from fastapi import Body, Depends, FastAPI
+from fastapi import Body, Depends, FastAPI, HTTPException
 
+from app.analysis.active_engine import ActiveAssessmentEngine
+from app.analysis.active_models import ActiveAssessmentRequest, ActiveAssessmentResponse
+from app.analysis.active_transport import BoundedHttpTransport
+from app.analysis.deep_analysis import (
+    DeepAnalysisRequest,
+    DeepAnalysisResponse,
+    complete_deep_analysis,
+)
 from app.analysis.enrichment import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -16,11 +26,37 @@ from app.analysis.enrichment import (
     embed_text_batch,
     enrich_snapshot,
 )
-from app.analysis.deep_analysis import DeepAnalysisRequest, DeepAnalysisResponse, complete_deep_analysis
 from app.analysis.models import StaticAnalysisRequest, StaticAnalysisResponse
 from app.analysis.static_analyzer import analyze_snapshot
 from app.config import Settings, get_settings
 from app.security import require_internal_job_token, verify_internal_job_token
+
+logger = logging.getLogger(__name__)
+
+
+def _validate_allowed_hosts(allowed_hosts: list[str]) -> None:
+    """Validate that all allowed_hosts are valid hostnames/wildcards."""
+    if not allowed_hosts:
+        raise ValueError("allowed_hosts cannot be empty")
+    
+    for host in allowed_hosts:
+        if not host:
+            raise ValueError("allowed_hosts contains empty string")
+        
+        # Normalize and validate
+        normalized = host.lower().rstrip(".")
+        
+        # Wildcard validation
+        if normalized.startswith("*."):
+            domain = normalized[2:]
+            if not domain or "." not in domain:
+                raise ValueError(f"Invalid wildcard domain: {host}")
+        else:
+            # Validate hostname
+            try:
+                urlparse(f"http://{normalized}/")
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid hostname: {host}")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -102,6 +138,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved_settings.internal_job_token_secret.get_secret_value(),
         )
         return await complete_deep_analysis(resolved_settings, body)
+
+    @app.post("/internal/assessment/active")
+    async def internal_active_assessment(
+        body: ActiveAssessmentRequest,
+        token: str = Depends(require_internal_job_token),
+    ) -> ActiveAssessmentResponse:
+        verify_internal_job_token(
+            token,
+            resolved_settings.internal_job_token_secret.get_secret_value(),
+        )
+        
+        # Validate allowed_hosts before creating transport
+        try:
+            _validate_allowed_hosts(body.allowed_hosts)
+        except ValueError as e:
+            logger.warning(f"Invalid allowed_hosts in active assessment: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid allowed_hosts: {str(e)}")
+        
+        transport = BoundedHttpTransport(
+            allowed_hosts=body.allowed_hosts,
+            max_response_bytes=body.budget.max_response_bytes,
+            timeout_seconds=body.budget.timeout_seconds,
+        )
+        return await ActiveAssessmentEngine(transport).assess(body)
 
     return app
 

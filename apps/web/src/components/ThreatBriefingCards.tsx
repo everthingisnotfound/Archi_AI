@@ -176,7 +176,7 @@ export function ThreatBriefingCards({
             transition={{ delay: index * 0.08, duration: 0.4, ease: "easeOut" }}
             className="group relative overflow-hidden rounded-xl border p-5"
             style={{
-              backgroundColor: `${severityConfig.glowColor.replace('0.3', '0.03')}`,
+              backgroundColor: severityConfig.glowColor.replace('0.3', '0.03'),
               borderColor: severityConfig.borderColor,
               boxShadow: `0 0 25px ${severityConfig.glowColor}, inset 0 0 30px ${severityConfig.glowColor.replace('0.3', '0.05')}`,
             }}
@@ -204,7 +204,7 @@ export function ThreatBriefingCards({
                 <div
                   className="flex h-12 w-12 items-center justify-center rounded-xl"
                   style={{
-                    backgroundColor: `${severityConfig.glowColor}`,
+                    backgroundColor: severityConfig.glowColor,
                     boxShadow: `0 0 20px ${severityConfig.glowColor}`,
                   }}
                 >
@@ -247,7 +247,7 @@ export function ThreatBriefingCards({
                   animate={{ scale: 1 }}
                   className="rounded-lg px-3 py-1.5"
                   style={{
-                    backgroundColor: `${severityConfig.glowColor}`,
+                    backgroundColor: severityConfig.glowColor,
                     boxShadow: `0 0 15px ${severityConfig.glowColor}`,
                   }}
                 >

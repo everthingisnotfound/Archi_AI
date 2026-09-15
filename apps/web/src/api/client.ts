@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const apiBaseUrl =
+  typeof import.meta.env.VITE_API_BASE_URL === "string"
+    ? import.meta.env.VITE_API_BASE_URL
+    : "/api";
 let csrfToken: string | undefined;
 
 const csrfResponseSchema = z.object({
@@ -63,7 +66,7 @@ function parseApiErrorMessage(payload: unknown): string {
     return "Request failed.";
   }
 
-  const error = (payload).error;
+  const error = payload.error;
   if (typeof error !== "object" || error === null) {
     return "Request failed.";
   }
@@ -97,4 +100,3 @@ function parseApiErrorMessage(payload: unknown): string {
 
   return message;
 }
-

@@ -354,6 +354,10 @@ model Finding {
   description    String
   startLine      Int?
   endLine        Int?
+  findingType    String             @db.VarChar(80) @default("static")
+  confidence     Int                @default(100)
+  limitations    String?
+  evidence       Json               @default("{}")
   metadata       Json               @default("{}")
   createdAt      DateTime           @default(now())
   fileNode       FileNode?          @relation(fields: [fileNodeId], references: [id], onDelete: SetNull)
@@ -363,6 +367,9 @@ model Finding {
   @@index([organizationId])
   @@index([repositoryId, snapshotId])
   @@index([severity, category])
+  @@index([findingType, confidence])
+  @@index([snapshotId, createdAt])
+  @@index([repositoryId, findingType])
 }
 
 model Metric {
@@ -451,4 +458,3 @@ model AuditEvent {
   @@index([createdAt])
   @@index([action])
 }
-

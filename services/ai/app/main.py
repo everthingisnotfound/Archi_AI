@@ -55,8 +55,8 @@ def _validate_allowed_hosts(allowed_hosts: list[str]) -> None:
             # Validate hostname
             try:
                 urlparse(f"http://{normalized}/")
-            except (ValueError, TypeError):
-                raise ValueError(f"Invalid hostname: {host}")
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid hostname: {host}") from e
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -154,7 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             _validate_allowed_hosts(body.allowed_hosts)
         except ValueError as e:
             logger.warning(f"Invalid allowed_hosts in active assessment: {e}")
-            raise HTTPException(status_code=400, detail=f"Invalid allowed_hosts: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Invalid allowed_hosts: {str(e)}") from e
         
         transport = BoundedHttpTransport(
             allowed_hosts=body.allowed_hosts,

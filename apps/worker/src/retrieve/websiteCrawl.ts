@@ -8,11 +8,13 @@ import { resolvePublicWebsiteAddress } from "./assertPublicWebsiteUrl.js";
 import { buildAttackSurfaceInventory } from "./attackSurfaceInventory.js";
 
 const FETCH_TIMEOUT_MS = 30_000;
+const CRAWL_TIMEOUT_MS = 120_000;
 const MAX_BYTES_PER_ASSET = 1_500_000;
 const MAX_BYTES_PER_PAGE = 1_500_000;
 const MAX_REDIRECTS = 5;
 const MAX_ROBOTS_BYTES = 200_000;
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 type FetchedResource = {
   body: Buffer;
@@ -129,9 +131,10 @@ export async function crawlPublicWebsite(
   requestedOptions: WebsiteCrawlOptions = {},
 ): Promise<WebsiteCrawlResult> {
   const options = normalizeOptions(requestedOptions);
+  const deadlineAt = Date.now() + CRAWL_TIMEOUT_MS;
   await mkdir(targetDirectory, { recursive: true });
 
-  const homepage = await fetchResource(startUrl, { maxBytes: MAX_BYTES_PER_PAGE });
+  const homepage = await fetchResource(startUrl, { deadlineAt, maxBytes: MAX_BYTES_PER_PAGE });
   if (homepage.status >= 400) {
     throw new AppError({
       code: ErrorCode.InvalidInput,
@@ -149,7 +152,7 @@ export async function crawlPublicWebsite(
 
   const scopeOrigin = new URL(homepage.finalUrl).origin;
   const canonicalStartUrl = canonicalizeUrl(homepage.finalUrl);
-  const robots = await loadRobotsPolicy(scopeOrigin);
+  const robots = await loadRobotsPolicy(scopeOrigin, deadlineAt);
   const pages: CapturedPage[] = [];
   const skipped: Array<{ reason: string; url: string }> = [];
   const failed: Array<{ reason: string; url: string }> = [];
@@ -187,6 +190,7 @@ export async function crawlPublicWebsite(
     try {
       const page = await fetchResource(candidate.url, {
         allowedOrigin: scopeOrigin,
+        deadlineAt,
         maxBytes: MAX_BYTES_PER_PAGE,
       });
       const canonicalFinalUrl = canonicalizeUrl(page.finalUrl);
@@ -224,8 +228,15 @@ export async function crawlPublicWebsite(
     }
   }
 
-  const assets = await captureSameOriginAssets({ options, pages, scopeOrigin, targetDirectory });
+  const assets = await captureSameOriginAssets({
+    deadlineAt,
+    options,
+    pages,
+    scopeOrigin,
+    targetDirectory,
+  });
   const endpoints = await discoverAndCaptureScriptEndpoints({
+    deadlineAt,
     options,
     pages,
     scopeOrigin,
@@ -270,13 +281,23 @@ export async function crawlPublicWebsite(
   );
   await writeBinary(
     path.join(targetDirectory, "_archaeologist", "crawl-observations.json"),
-    Buffer.from(JSON.stringify({
-      coverage,
-      failed: failed.slice(0, 100),
-      skipped: skipped.slice(0, 100),
-    }, null, 2), "utf8"),
+    Buffer.from(
+      JSON.stringify(
+        {
+          coverage,
+          failed: failed.slice(0, 100),
+          skipped: skipped.slice(0, 100),
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    ),
   );
-  await writeBinary(path.join(targetDirectory, "README.md"), Buffer.from(buildCrawlReadme(siteProfile), "utf8"));
+  await writeBinary(
+    path.join(targetDirectory, "README.md"),
+    Buffer.from(buildCrawlReadme(siteProfile), "utf8"),
+  );
 
   return {
     discoveredCount: siteProfile.crawl.discoveredCount,
@@ -296,7 +317,12 @@ function normalizeOptions(requested: WebsiteCrawlOptions): Required<WebsiteCrawl
     maxAssets: clamp(requested.maxAssets, 1, 100, websiteCrawlDefaults.maxAssets),
     maxDepth: clamp(requested.maxDepth, 0, 5, websiteCrawlDefaults.maxDepth),
     maxPages: clamp(requested.maxPages, 1, 100, websiteCrawlDefaults.maxPages),
-    requestDelayMs: clamp(requested.requestDelayMs, 100, 5_000, websiteCrawlDefaults.requestDelayMs),
+    requestDelayMs: clamp(
+      requested.requestDelayMs,
+      100,
+      5_000,
+      websiteCrawlDefaults.requestDelayMs,
+    ),
   };
 }
 
@@ -335,7 +361,10 @@ function buildPageRecord(input: {
   };
 }
 
-function assessCoverage(html: string, page: CapturedPage): { complete: boolean; reasons: string[] } {
+function assessCoverage(
+  html: string,
+  page: CapturedPage,
+): { complete: boolean; reasons: string[] } {
   const reasons: string[] = [];
   const normalized = html.toLowerCase();
   if (page.links.length === 0 && page.resources.some((resource) => resource.kind === "script")) {
@@ -346,7 +375,9 @@ function assessCoverage(html: string, page: CapturedPage): { complete: boolean; 
       normalized,
     )
   ) {
-    reasons.push("entry page appears to be a verification, bot challenge, or access-denied interstitial");
+    reasons.push(
+      "entry page appears to be a verification, bot challenge, or access-denied interstitial",
+    );
   }
   return { complete: reasons.length === 0, reasons };
 }
@@ -371,6 +402,7 @@ function enqueueLinks(
 }
 
 async function captureSameOriginAssets(input: {
+  deadlineAt: number;
   options: Required<WebsiteCrawlOptions>;
   pages: CapturedPage[];
   scopeOrigin: string;
@@ -379,18 +411,20 @@ async function captureSameOriginAssets(input: {
   const candidates = new Map<string, ResourceReference>();
   for (const page of input.pages) {
     for (const resource of page.resources) {
-      if (!resource.thirdParty && !candidates.has(resource.url)) candidates.set(resource.url, resource);
+      if (!resource.thirdParty && !candidates.has(resource.url))
+        candidates.set(resource.url, resource);
     }
-
   }
 
   const storedPaths = new Map<string, string>();
   const assets: Array<{ kind: string; path: string; url: string }> = [];
   for (const resource of [...candidates.values()].slice(0, input.options.maxAssets)) {
+    if (Date.now() >= input.deadlineAt) break;
     await wait(input.options.requestDelayMs);
     try {
       const asset = await fetchResource(resource.url, {
         allowedOrigin: input.scopeOrigin,
+        deadlineAt: input.deadlineAt,
         maxBytes: MAX_BYTES_PER_ASSET,
       });
       if (asset.status >= 400 || asset.truncated) continue;
@@ -399,7 +433,11 @@ async function captureSameOriginAssets(input: {
       const relativePath = `assets/${resource.kind}-${digest}${extension}`;
       await writeBinary(path.join(input.targetDirectory, relativePath), asset.body);
       storedPaths.set(resource.url, relativePath);
-      assets.push({ kind: resource.kind, path: relativePath, url: canonicalizeUrl(asset.finalUrl) });
+      assets.push({
+        kind: resource.kind,
+        path: relativePath,
+        url: canonicalizeUrl(asset.finalUrl),
+      });
     } catch {
       // Capturing an asset is optional; the page record retains the reference.
     }
@@ -415,6 +453,7 @@ async function captureSameOriginAssets(input: {
 }
 
 async function discoverAndCaptureScriptEndpoints(input: {
+  deadlineAt: number;
   options: Required<WebsiteCrawlOptions>;
   pages: CapturedPage[];
   scopeOrigin: string;
@@ -425,13 +464,19 @@ async function discoverAndCaptureScriptEndpoints(input: {
   );
   const candidates = new Map<string, string>();
   for (const script of scripts.slice(0, input.options.maxAssets)) {
+    if (Date.now() >= input.deadlineAt) break;
     try {
       const response = await fetchResource(script.url, {
         allowedOrigin: input.scopeOrigin,
+        deadlineAt: input.deadlineAt,
         maxBytes: MAX_BYTES_PER_ASSET,
       });
       if (response.status >= 400 || response.truncated) continue;
-      for (const endpoint of extractScriptEndpoints(response.body.toString("utf8"), script.url, input.scopeOrigin)) {
+      for (const endpoint of extractScriptEndpoints(
+        response.body.toString("utf8"),
+        script.url,
+        input.scopeOrigin,
+      )) {
         candidates.set(endpoint, script.url);
       }
     } catch {
@@ -440,11 +485,16 @@ async function discoverAndCaptureScriptEndpoints(input: {
   }
 
   const endpoints: DiscoveredEndpoint[] = [];
-  for (const [endpoint, source] of [...candidates.entries()].slice(0, input.options.maxAssets * 4)) {
+  for (const [endpoint, source] of [...candidates.entries()].slice(
+    0,
+    input.options.maxAssets * 4,
+  )) {
+    if (Date.now() >= input.deadlineAt) break;
     await wait(input.options.requestDelayMs);
     try {
       const response = await fetchResource(endpoint, {
         allowedOrigin: input.scopeOrigin,
+        deadlineAt: input.deadlineAt,
         maxBytes: MAX_BYTES_PER_PAGE,
       });
       if (response.status >= 400 || response.truncated) continue;
@@ -486,16 +536,31 @@ function extractScriptEndpoints(script: string, baseUrl: string, scopeOrigin: st
   return [...candidates];
 }
 
-async function loadRobotsPolicy(scopeOrigin: string): Promise<{ policy: RobotsPolicy; rules: RobotsRule[] }> {
+async function loadRobotsPolicy(
+  scopeOrigin: string,
+  deadlineAt: number,
+): Promise<{ policy: RobotsPolicy; rules: RobotsRule[] }> {
   const robotsUrl = new URL("/robots.txt", scopeOrigin).href;
   try {
-    const response = await fetchResource(robotsUrl, { allowedOrigin: scopeOrigin, maxBytes: MAX_ROBOTS_BYTES });
+    const response = await fetchResource(robotsUrl, {
+      allowedOrigin: scopeOrigin,
+      deadlineAt,
+      maxBytes: MAX_ROBOTS_BYTES,
+    });
     if (response.status >= 400 || response.truncated) {
-      return { policy: { allowed: true, ruleCount: 0, status: response.status, url: robotsUrl }, rules: [] };
+      return {
+        policy: { allowed: true, ruleCount: 0, status: response.status, url: robotsUrl },
+        rules: [],
+      };
     }
     const rules = parseRobotsRules(response.body.toString("utf8"));
     return {
-      policy: { allowed: true, ruleCount: rules.length, status: response.status, url: canonicalizeUrl(response.finalUrl) },
+      policy: {
+        allowed: true,
+        ruleCount: rules.length,
+        status: response.status,
+        url: canonicalizeUrl(response.finalUrl),
+      },
       rules,
     };
   } catch {
@@ -532,13 +597,16 @@ function parseRobotsRules(content: string): RobotsRule[] {
 function isAllowedByRobots(pathname: string, robots: { rules: RobotsRule[] }): boolean {
   const matches = robots.rules.filter((rule) => pathname.startsWith(rule.path));
   if (matches.length === 0) return true;
-  matches.sort((left, right) => right.path.length - left.path.length || Number(right.allowed) - Number(left.allowed));
+  matches.sort(
+    (left, right) =>
+      right.path.length - left.path.length || Number(right.allowed) - Number(left.allowed),
+  );
   return matches[0]?.allowed ?? true;
 }
 
 async function fetchResource(
   inputUrl: string,
-  options: { allowedOrigin?: string; maxBytes: number },
+  options: { allowedOrigin?: string; deadlineAt?: number; maxBytes: number },
 ): Promise<FetchedResource> {
   let requestUrl = canonicalizeUrl(inputUrl);
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
@@ -553,7 +621,15 @@ async function fetchResource(
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT_MS);
+    const timeoutMs = Math.min(
+      FETCH_TIMEOUT_MS,
+      options.deadlineAt === undefined
+        ? FETCH_TIMEOUT_MS
+        : Math.max(1, options.deadlineAt - Date.now()),
+    );
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
     try {
       const response = await requestResolvedResource(resolved, options.maxBytes, controller);
       const location = response.headers["location"];
@@ -585,49 +661,68 @@ async function fetchResource(
       resolved: { address: string; family: 4 | 6; url: URL },
       maxBytes: number,
       controller: AbortController,
-    ): Promise<{ body: Buffer; headers: Record<string, string>; status: number; truncated: boolean }> {
+    ): Promise<{
+      body: Buffer;
+      headers: Record<string, string>;
+      status: number;
+      truncated: boolean;
+    }> {
       const request = resolved.url.protocol === "https:" ? httpsRequest : httpRequest;
       return await new Promise((resolve, reject) => {
-        const client = request({
-          family: resolved.family,
-          hostname: resolved.address,
-          path: `${resolved.url.pathname}${resolved.url.search}`,
-          port: resolved.url.port || (resolved.url.protocol === "https:" ? 443 : 80),
-          ...(resolved.url.protocol === "https:" ? { servername: resolved.url.hostname } : {}),
-          headers: {
-            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/css,text/javascript,application/javascript;q=0.8,*/*;q=0.5",
-            Host: resolved.url.host,
-            "User-Agent": USER_AGENT,
+        const client = request(
+          {
+            family: resolved.family,
+            hostname: resolved.address,
+            path: `${resolved.url.pathname}${resolved.url.search}`,
+            port: resolved.url.port || (resolved.url.protocol === "https:" ? 443 : 80),
+            ...(resolved.url.protocol === "https:" ? { servername: resolved.url.hostname } : {}),
+            headers: {
+              Accept:
+                "text/html,application/xhtml+xml,application/xml;q=0.9,text/css,text/javascript,application/javascript;q=0.8,*/*;q=0.5",
+              Host: resolved.url.host,
+              "User-Agent": USER_AGENT,
+            },
+            method: "GET",
+            signal: controller.signal,
           },
-          method: "GET",
-          signal: controller.signal,
-        }, (response) => {
-          const headers: Record<string, string> = {};
-          for (const [key, value] of Object.entries(response.headers)) {
-            if (typeof value === "string") headers[key.toLowerCase()] = value;
-            else if (Array.isArray(value)) headers[key.toLowerCase()] = value.join(", ");
-          }
-          const chunks: Buffer[] = [];
-          let total = 0;
-          let truncated = false;
-          response.on("data", (chunk: Buffer) => {
-            if (truncated) return;
-            if (total + chunk.length > maxBytes) {
-              truncated = true;
-              response.destroy();
-              return;
+          (response) => {
+            const headers: Record<string, string> = {};
+            for (const [key, value] of Object.entries(response.headers)) {
+              if (typeof value === "string") headers[key.toLowerCase()] = value;
+              else if (Array.isArray(value)) headers[key.toLowerCase()] = value.join(", ");
             }
-            chunks.push(chunk);
-            total += chunk.length;
-          });
-          response.on("end", () => { resolve({
-            body: Buffer.concat(chunks),
-            headers,
-            status: response.statusCode ?? 0,
-            truncated,
-          }); });
-          response.on("error", reject);
-        });
+            const chunks: Buffer[] = [];
+            let total = 0;
+            let truncated = false;
+            let settled = false;
+            const complete = () => {
+              if (settled) return;
+              settled = true;
+              resolve({
+                body: Buffer.concat(chunks),
+                headers,
+                status: response.statusCode ?? 0,
+                truncated,
+              });
+            };
+            response.on("data", (chunk: Buffer) => {
+              if (truncated) return;
+              if (total + chunk.length > maxBytes) {
+                truncated = true;
+                complete();
+                response.destroy();
+                return;
+              }
+              chunks.push(chunk);
+              total += chunk.length;
+            });
+            response.on("end", complete);
+            response.on("error", reject);
+            response.on("close", () => {
+              if (!settled) reject(new Error("Website response closed before completion."));
+            });
+          },
+        );
         client.on("error", reject);
         client.end();
       });
@@ -646,7 +741,11 @@ async function fetchResource(
   });
 }
 
-function extractNavigableLinks(html: string, baseUrl: string, scopeOrigin: string): {
+function extractNavigableLinks(
+  html: string,
+  baseUrl: string,
+  scopeOrigin: string,
+): {
   externalCount: number;
   internal: string[];
   targetBlankWithoutNoopener: number;
@@ -660,7 +759,10 @@ function extractNavigableLinks(html: string, baseUrl: string, scopeOrigin: strin
     const resolved = resolveUrl(baseUrl, attributes.href);
     if (!resolved) continue;
     const parsed = new URL(resolved);
-    if (attributes.target?.toLowerCase() === "_blank" && !/\bnoopener\b/i.test(attributes.rel ?? "")) {
+    if (
+      attributes.target?.toLowerCase() === "_blank" &&
+      !/\bnoopener\b/i.test(attributes.rel ?? "")
+    ) {
       targetBlankWithoutNoopener += 1;
     }
     if (parsed.origin !== scopeOrigin) {
@@ -672,13 +774,22 @@ function extractNavigableLinks(html: string, baseUrl: string, scopeOrigin: strin
   return { externalCount, internal: [...internal].sort(), targetBlankWithoutNoopener };
 }
 
-function extractResourceReferences(html: string, baseUrl: string, scopeOrigin: string): ResourceReference[] {
+function extractResourceReferences(
+  html: string,
+  baseUrl: string,
+  scopeOrigin: string,
+): ResourceReference[] {
   const resources: ResourceReference[] = [];
   for (const tag of html.matchAll(/<script\b[^>]*>/gi)) {
     const attributes = parseTagAttributes(tag[0] ?? "");
     const url = attributes.src ? resolveUrl(baseUrl, attributes.src) : undefined;
     if (url) {
-      resources.push({ integrity: Boolean(attributes.integrity), kind: "script", thirdParty: new URL(url).origin !== scopeOrigin, url: canonicalizeUrl(url) });
+      resources.push({
+        integrity: Boolean(attributes.integrity),
+        kind: "script",
+        thirdParty: new URL(url).origin !== scopeOrigin,
+        url: canonicalizeUrl(url),
+      });
     }
   }
   for (const tag of html.matchAll(/<link\b[^>]*>/gi)) {
@@ -686,7 +797,12 @@ function extractResourceReferences(html: string, baseUrl: string, scopeOrigin: s
     if (!/\bstylesheet\b/i.test(attributes.rel ?? "") || !attributes.href) continue;
     const url = resolveUrl(baseUrl, attributes.href);
     if (url) {
-      resources.push({ integrity: Boolean(attributes.integrity), kind: "stylesheet", thirdParty: new URL(url).origin !== scopeOrigin, url: canonicalizeUrl(url) });
+      resources.push({
+        integrity: Boolean(attributes.integrity),
+        kind: "stylesheet",
+        thirdParty: new URL(url).origin !== scopeOrigin,
+        url: canonicalizeUrl(url),
+      });
     }
   }
   return dedupeResources(resources);
@@ -697,7 +813,9 @@ function extractForms(html: string, baseUrl: string): FormProfile[] {
   for (const match of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
     const attributes = parseTagAttributes(match[1] ?? "");
     const inputs = [...(match[2] ?? "").matchAll(/<(?:input|textarea|select)\b[^>]*>/gi)];
-    const inputTypes = inputs.map((input) => parseTagAttributes(input[0] ?? "").type?.toLowerCase() ?? "text");
+    const inputTypes = inputs.map(
+      (input) => parseTagAttributes(input[0] ?? "").type?.toLowerCase() ?? "text",
+    );
     forms.push({
       action: canonicalizeUrl(resolveUrl(baseUrl, attributes.action ?? "") ?? baseUrl),
       fieldCount: inputs.length,
@@ -711,9 +829,12 @@ function extractForms(html: string, baseUrl: string): FormProfile[] {
 
 function parseTagAttributes(tag: string): Record<string, string> {
   const attributes: Record<string, string> = {};
-  for (const match of tag.matchAll(/([\w:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g)) {
+  for (const match of tag.matchAll(
+    /([\w:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g,
+  )) {
     const key = match[1]?.toLowerCase();
-    if (!key || ["a", "script", "link", "form", "input", "textarea", "select"].includes(key)) continue;
+    if (!key || ["a", "script", "link", "form", "input", "textarea", "select"].includes(key))
+      continue;
     attributes[key] = match[2] ?? match[3] ?? match[4] ?? "";
   }
   return attributes;
@@ -721,12 +842,22 @@ function parseTagAttributes(tag: string): Record<string, string> {
 
 function extractTagContent(html: string, tag: string): string | undefined {
   const match = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i").exec(html);
-  return match?.[1]?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
+  return match?.[1]
+    ?.replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
 }
 
 function extractMeta(html: string, name: string): string | undefined {
-  const pattern = new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']+)["']`, "i");
-  const alt = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']${name}["']`, "i");
+  const pattern = new RegExp(
+    `<meta[^>]+(?:name|property)=["']${name}["'][^>]+content=["']([^"']+)["']`,
+    "i",
+  );
+  const alt = new RegExp(
+    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']${name}["']`,
+    "i",
+  );
   return pattern.exec(html)?.[1]?.trim() ?? alt.exec(html)?.[1]?.trim();
 }
 
@@ -752,8 +883,21 @@ function canonicalizeUrl(value: string): string {
 }
 
 function pickSecurityHeaders(headers: Record<string, string>): Record<string, string> {
-  const keys = ["content-security-policy", "content-security-policy-report-only", "strict-transport-security", "x-content-type-options", "x-frame-options", "x-xss-protection", "referrer-policy", "permissions-policy", "cross-origin-opener-policy", "cross-origin-resource-policy"];
-  return Object.fromEntries(keys.filter((key) => Boolean(headers[key])).map((key) => [key, headers[key] as string]));
+  const keys = [
+    "content-security-policy",
+    "content-security-policy-report-only",
+    "strict-transport-security",
+    "x-content-type-options",
+    "x-frame-options",
+    "x-xss-protection",
+    "referrer-policy",
+    "permissions-policy",
+    "cross-origin-opener-policy",
+    "cross-origin-resource-policy",
+  ];
+  return Object.fromEntries(
+    keys.filter((key) => Boolean(headers[key])).map((key) => [key, headers[key] as string]),
+  );
 }
 
 function parseSetCookies(headers: string[]): Array<Record<string, boolean | string>> {
@@ -761,7 +905,12 @@ function parseSetCookies(headers: string[]): Array<Record<string, boolean | stri
     const segments = header.split(";").map((item) => item.trim());
     const name = segments[0]?.split("=")[0] ?? "cookie";
     const flags = new Set(segments.slice(1).map((flag) => flag.toLowerCase().split("=")[0] ?? ""));
-    return { httpOnly: flags.has("httponly"), name, secure: flags.has("secure"), sameSite: segments.find((flag) => flag.toLowerCase().startsWith("samesite=")) ?? "" };
+    return {
+      httpOnly: flags.has("httponly"),
+      name,
+      secure: flags.has("secure"),
+      sameSite: segments.find((flag) => flag.toLowerCase().startsWith("samesite=")) ?? "",
+    };
   });
 }
 
@@ -776,14 +925,19 @@ function collectThirdParties(scopeOrigin: string, pages: CapturedPage[]): string
       if (resource.thirdParty) hosts.add(new URL(resource.url).hostname.toLowerCase());
     }
     for (const form of page.forms) {
-      if (new URL(form.action).origin !== scopeOrigin) hosts.add(new URL(form.action).hostname.toLowerCase());
+      if (new URL(form.action).origin !== scopeOrigin)
+        hosts.add(new URL(form.action).hostname.toLowerCase());
     }
   }
   return [...hosts].sort();
 }
 
 function dedupeResources(resources: ResourceReference[]): ResourceReference[] {
-  return [...new Map(resources.map((resource) => [`${resource.kind}:${resource.url}`, resource])).values()];
+  return [
+    ...new Map(
+      resources.map((resource) => [`${resource.kind}:${resource.url}`, resource]),
+    ).values(),
+  ];
 }
 
 function extensionFromUrl(url: string, contentType: string): string {
@@ -824,18 +978,24 @@ function buildCrawlReadme(profile: {
     "",
     "## Captured pages",
     "",
-    ...profile.pages.map((page) => `- [${page.url}](${page.path}) — depth ${page.depth}, HTTP ${page.status}`),
+    ...profile.pages.map(
+      (page) => `- [${page.url}](${page.path}) — depth ${page.depth}, HTTP ${page.status}`,
+    ),
     "",
     "## Passively observed API endpoints",
     "",
     "- These are same-origin GET requests found as literal URLs in downloaded JavaScript. No credentials, mutations, or payloads were sent.",
     ...(profile.endpoints.length > 0
-      ? profile.endpoints.map((endpoint) => `- [${endpoint.url}](${endpoint.path}) — HTTP ${endpoint.status}`)
+      ? profile.endpoints.map(
+          (endpoint) => `- [${endpoint.url}](${endpoint.path}) — HTTP ${endpoint.status}`,
+        )
       : ["- none observed"]),
     "",
     "## Third-party resource and form hosts",
     "",
-    ...(profile.thirdParties.length > 0 ? profile.thirdParties.map((host) => `- ${host}`) : ["- none observed"]),
+    ...(profile.thirdParties.length > 0
+      ? profile.thirdParties.map((host) => `- ${host}`)
+      : ["- none observed"]),
     "",
   ].join("\n");
 }
@@ -862,5 +1022,7 @@ async function writeBinary(filePath: string, body: Buffer): Promise<void> {
 }
 
 async function wait(milliseconds: number): Promise<void> {
-  await new Promise<void>((resolve) => { setTimeout(resolve, milliseconds); });
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }

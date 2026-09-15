@@ -11,7 +11,7 @@ export const workerConfig = loadEnv({
   MAX_SINGLE_FILE_BYTES: intEnv(repositoryLimitDefaults.maxSingleFileBytes),
   MAX_UPLOAD_BYTES: intEnv(repositoryLimitDefaults.maxUploadBytes),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  REDIS_URL: z.string().url().default("redis://localhost:6379"),
+  REDIS_URL: stringEnv("REDIS_URL"),
   WORKER_CONCURRENCY: intEnv(2),
   WORKER_HEALTH_PORT: intEnv(4100),
   WORKSPACE_ROOT: z.string().min(1).default(process.env.NODE_ENV === "production" ? "/tmp/workspaces" : "./data/workspaces"),

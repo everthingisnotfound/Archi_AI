@@ -1,5 +1,9 @@
 import { rm } from "node:fs/promises";
-import { ingestionJobPayloadSchema, repositoryDirectoryInJob, sourceStagingDirectory } from "@ai-archaeologist/shared";
+import {
+  ingestionJobPayloadSchema,
+  repositoryDirectoryInJob,
+  sourceStagingDirectory,
+} from "@ai-archaeologist/shared";
 import type { PrismaClient } from "@prisma/client";
 import type { Job } from "bullmq";
 import type { WorkerConfig } from "./config.js";
@@ -41,7 +45,10 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
     }
 
     if (ingestionJob.status === "SUCCEEDED") {
-      dependencies.logger.info({ ingestionJobId: ingestionJob.id }, "ingestion job already completed");
+      dependencies.logger.info(
+        { ingestionJobId: ingestionJob.id },
+        "ingestion job already completed",
+      );
       return;
     }
 
@@ -79,10 +86,14 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
 
       await job.updateProgress(20);
       if (ingestionJob.source.type === "GITHUB") {
-        const cloneResult = await cloneGithubRepository(ingestionJob.source.uri ?? "", repositoryRoot, {
-          depth: dependencies.config.GITHUB_CLONE_DEPTH,
-          timeoutMs: dependencies.config.GITHUB_CLONE_TIMEOUT_MS,
-        });
+        const cloneResult = await cloneGithubRepository(
+          ingestionJob.source.uri ?? "",
+          repositoryRoot,
+          {
+            depth: dependencies.config.GITHUB_CLONE_DEPTH,
+            timeoutMs: dependencies.config.GITHUB_CLONE_TIMEOUT_MS,
+          },
+        );
         commitSha = cloneResult.commitSha;
         defaultBranch = cloneResult.defaultBranch;
       } else if (ingestionJob.source.type === "WEBSITE") {
@@ -128,7 +139,11 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
         });
       }
 
-      await persistSnapshotWorkspace(dependencies.config.WORKSPACE_ROOT, snapshotId, repositoryRoot);
+      await persistSnapshotWorkspace(
+        dependencies.config.WORKSPACE_ROOT,
+        snapshotId,
+        repositoryRoot,
+      );
 
       const analysisRun = await dependencies.prisma.analysisRun.create({
         data: {
@@ -140,12 +155,24 @@ export function createIngestionProcessor(dependencies: IngestionProcessorDepende
         },
       });
 
-      await dependencies.analysisJobPublisher.enqueueAnalysis({
-        analysisRunId: analysisRun.id,
-        organizationId: payload.organizationId,
-        repositoryId: payload.repositoryId,
-        snapshotId,
-      });
+      try {
+        await dependencies.analysisJobPublisher.enqueueAnalysis({
+          analysisRunId: analysisRun.id,
+          organizationId: payload.organizationId,
+          repositoryId: payload.repositoryId,
+          snapshotId,
+        });
+      } catch (error) {
+        await dependencies.prisma.analysisRun.update({
+          data: {
+            completedAt: new Date(),
+            stage: "FAILED",
+            status: "FAILED",
+          },
+          where: { id: analysisRun.id },
+        });
+        throw error;
+      }
 
       await job.updateProgress(100);
       await dependencies.prisma.ingestionJob.update({
@@ -198,8 +225,14 @@ function websiteCrawlOptions(metadata: unknown, config: WorkerConfig) {
     "crawl" in metadataRecord && metadataRecord.crawl && typeof metadataRecord.crawl === "object"
       ? metadataRecord.crawl
       : {};
-  const requestedPages = "maxPages" in crawl && typeof crawl.maxPages === "number" ? crawl.maxPages : config.WEBSITE_CRAWL_MAX_PAGES;
-  const requestedDepth = "maxDepth" in crawl && typeof crawl.maxDepth === "number" ? crawl.maxDepth : config.WEBSITE_CRAWL_MAX_DEPTH;
+  const requestedPages =
+    "maxPages" in crawl && typeof crawl.maxPages === "number"
+      ? crawl.maxPages
+      : config.WEBSITE_CRAWL_MAX_PAGES;
+  const requestedDepth =
+    "maxDepth" in crawl && typeof crawl.maxDepth === "number"
+      ? crawl.maxDepth
+      : config.WEBSITE_CRAWL_MAX_DEPTH;
 
   return {
     maxAssets: config.WEBSITE_CRAWL_MAX_ASSETS,

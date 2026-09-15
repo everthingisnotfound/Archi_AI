@@ -2,6 +2,15 @@ import { boolEnv, intEnv, loadEnv, stringEnv } from "@ai-archaeologist/config";
 import { repositoryLimitDefaults } from "@ai-archaeologist/shared";
 import { z } from "zod";
 
+const portSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(65535)
+  .refine((port) => port > 1023 || port === 80, {
+    message: "Port must be > 1023 or exactly 80 (requires root for other privileged ports)",
+  });
+
 export const apiConfig = loadEnv({
   API_BASE_URL: z.string().url().default("http://localhost:4000"),
   CORS_ORIGIN: z.string().transform((value) => value.split(",").map((origin) => origin.trim()).filter(Boolean)).default("http://localhost:5173"),
@@ -12,7 +21,7 @@ export const apiConfig = loadEnv({
   MAX_SINGLE_FILE_BYTES: intEnv(repositoryLimitDefaults.maxSingleFileBytes),
   MAX_UPLOAD_BYTES: intEnv(repositoryLimitDefaults.maxUploadBytes),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: intEnv(4000),
+  PORT: intEnv(4000).pipe(portSchema),
   RATE_LIMIT_FAIL_CLOSED: boolEnv(true),
   RATE_LIMIT_MAX_REQUESTS: intEnv(120),
   RATE_LIMIT_WINDOW_SECONDS: intEnv(60),
@@ -24,4 +33,3 @@ export const apiConfig = loadEnv({
 });
 
 export type ApiConfig = typeof apiConfig;
-

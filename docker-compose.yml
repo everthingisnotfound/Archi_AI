@@ -2,11 +2,11 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_DB: archaeologist
-      POSTGRES_PASSWORD: archaeologist
-      POSTGRES_USER: archaeologist
+      POSTGRES_DB: ${POSTGRES_DB:-archaeologist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-archaeologist}
+      POSTGRES_USER: ${POSTGRES_USER:-archaeologist}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U archaeologist -d archaeologist"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-archaeologist} -d ${POSTGRES_DB:-archaeologist}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -18,14 +18,16 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis-insecure-dev-only}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis-insecure-dev-only}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD:-redis-insecure-dev-only}\" ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
 
@@ -48,7 +50,7 @@ services:
     volumes:
       - workspace-data:/var/lib/archaeologist/workspaces
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>{if(!r.ok) throw new Error(r.statusText)}).catch(e=>{console.error(e);process.exit(1)})"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -71,10 +73,11 @@ services:
     environment:
       AI_SERVICE_URL: http://ai:8000
       CORS_ORIGIN: 'http://localhost:5173,http://localhost:8080'
+      WORKSPACE_ROOT: /var/lib/archaeologist/workspaces
     volumes:
       - workspace-data:/var/lib/archaeologist/workspaces
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4100/healthz').then(r=>{if(!r.ok) throw new Error(r.statusText)}).catch(e=>{console.error(e);process.exit(1)})"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -109,6 +112,11 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports:
       - "5173:80"
 
@@ -118,7 +126,7 @@ services:
       api:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "8080:80"
     volumes:

@@ -81,15 +81,24 @@ function parseApiErrorMessage(payload: unknown): string {
           return null;
         }
 
-        const detailMessage =
-          "message" in detail && typeof detail.message === "string" ? detail.message : null;
-        const path = "path" in detail && typeof detail.path === "string" ? detail.path : null;
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null;
 
-        if (!detailMessage) {
-          return null;
-        }
+    const detailMessage =
+      isRecord(detail) && typeof detail.message === "string"
+        ? detail.message
+        : null;
 
-        return path ? `${path}: ${detailMessage}` : detailMessage;
+    const path =
+      isRecord(detail) && typeof detail.path === "string"
+        ? detail.path
+        : null;
+
+    if (!detailMessage) {
+      return null;
+    }
+
+    return path ? `${path}: ${detailMessage}` : detailMessage;
       })
       .filter((value): value is string => value !== null);
 

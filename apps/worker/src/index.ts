@@ -104,7 +104,7 @@ for (const [queueName, workerInstance] of [
   workerInstance.on("failed", (job, error) => {
     logger.error({ err: error, jobId: job?.id, queue: queueName }, "job failed");
     if (job) {
-      void markDatabaseJobFailed(queueName, job.data, error).catch((persistenceError) => {
+      void markDatabaseJobFailed(queueName, job.data, error).catch((persistenceError: unknown) => {
         logger.error(
           { err: persistenceError, jobId: job.id, queue: queueName },
           "failed to persist terminal job state",

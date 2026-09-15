@@ -19,7 +19,7 @@ function analyzePassword(password: string): { strength: StrengthLevel; checks: S
     { label: "Contains uppercase letter", met: /[A-Z]/.test(password) },
     { label: "Contains lowercase letter", met: /[a-z]/.test(password) },
     { label: "Contains number", met: /\d/.test(password) },
-    { label: "Contains special character", met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) },
+    { label: "Contains special character", met: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password) },
   ];
 
   const metCount = checks.filter((c) => c.met).length;

@@ -60,7 +60,7 @@ export function AppShell(): React.JSX.Element {
                   aria-label="Sign out"
                   onClick={() => {
                     void logout().finally(() => {
-                      navigate("/login");
+                      void navigate("/login");
                     });
                   }}
                   size="icon"

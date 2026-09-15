@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type SyntheticEvent, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Cpu, LogIn, Shield, UserPlus } from "lucide-react";
@@ -33,11 +33,11 @@ export function LoginPage(): React.JSX.Element {
         : register({ email, name, organizationName, password }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me"] });
-      navigate("/");
+      void navigate("/");
     },
   });
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  function handleSubmit(event: SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
     setFormError(null);
 
@@ -57,7 +57,7 @@ export function LoginPage(): React.JSX.Element {
       return;
     }
 
-    authMutation.mutate();
+    void authMutation.mutateAsync();
   }
 
   return (

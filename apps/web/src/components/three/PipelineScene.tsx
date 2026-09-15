@@ -223,12 +223,19 @@ function ConnectionMesh({ from, to, color }: ConnectionMeshProps): React.JSX.Ele
 
   const linePositions = useMemo(() => {
     const pos: number[] = [];
+
     for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i]!;
-      const b = points[i + 1]!;
+      const a = points[i];
+      const b = points[i + 1];
+
+      if (!a || !b) {
+        continue;
+      }
+
       pos.push(a.x, a.y, a.z);
       pos.push(b.x, b.y, b.z);
     }
+
     return new Float32Array(pos);
   }, [points]);
 
@@ -298,12 +305,21 @@ export function PipelineScene({ activeStage = null }: PipelineSceneProps): React
 
       <group ref={groupRef}>
         {PIPELINE_NODES.map((node) => (
-          <PipelineNodeMesh key={node.id} node={node} active={getActive(node.id)} />
+          <PipelineNodeMesh
+            key={node.id}
+            node={node}
+            active={getActive(node.id)}
+          />
         ))}
 
         {PIPELINE_CONNECTIONS.map((conn) => {
-          const fromNode = PIPELINE_NODES.find((n) => n.id === conn.from)!;
-          const toNode = PIPELINE_NODES.find((n) => n.id === conn.to)!;
+          const fromNode = PIPELINE_NODES.find((n) => n.id === conn.from);
+          const toNode = PIPELINE_NODES.find((n) => n.id === conn.to);
+
+          if (!fromNode || !toNode) {
+            return null;
+          }
+
           return (
             <ConnectionMesh
               key={`${conn.from}-${conn.to}`}

@@ -109,23 +109,37 @@ function dedupeEndpoints(input: DiscoveredEndpoint[], origin: string, pages: Cap
   const records = new Map<string, InventoryEndpoint>();
   for (const endpoint of input) {
     const url = canonicalize(endpoint.url);
-    if (endpoint.method !== "GET" || !isSameOrigin(url, origin)) continue;
-    const sourcePage = pages.find((page) => page.resources.some((resource) => canonicalize(resource.url) === canonicalize(endpoint.source)));
+
+    if (!isSameOrigin(url, origin)) continue;
+
+    const sourcePage = pages.find((page) =>
+      page.resources.some(
+        (resource) =>
+          canonicalize(resource.url) === canonicalize(endpoint.source),
+      ),
+    );
+
     const provenance: InventoryProvenance = {
       ...(sourcePage ? { pageUrl: canonicalize(sourcePage.url) } : {}),
       depth: sourcePage?.depth ?? 0,
       source: "endpoint",
     };
+
     const existing = records.get(url);
+
     if (existing) {
       existing.provenance = mergeProvenance(existing.provenance, [provenance]);
       continue;
     }
+
     records.set(url, {
       method: "GET",
       path: endpoint.path,
       provenance: [provenance],
-      response: { contentType: endpoint.contentType, status: endpoint.status },
+      response: {
+        contentType: endpoint.contentType,
+        status: endpoint.status,
+      },
       ...(endpoint.source ? { source: canonicalize(endpoint.source) } : {}),
       url,
     });

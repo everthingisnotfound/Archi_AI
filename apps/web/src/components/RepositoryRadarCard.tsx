@@ -28,9 +28,18 @@ function MiniRadarChart({ metrics, size = 80 }: { metrics: MetricData[]; size?: 
   const angleStep = (Math.PI * 2) / numAxes;
 
   const getPoint = (index: number, value: number): { x: number; y: number } => {
-    const angle = index * angleStep - Math.PI / 2;
-    const distance = (value / metrics[index]!.max) * radius;
+  const angle = index * angleStep - Math.PI / 2;
+  const metric = metrics[index];
+
+  if (!metric) {
     return {
+      x: center,
+      y: center,
+    };
+  }
+
+  const distance = (value / metric.max) * radius;
+  return {
       x: center + Math.cos(angle) * distance,
       y: center + Math.sin(angle) * distance,
     };

@@ -35,11 +35,19 @@ export function RepositoriesPage(): React.JSX.Element {
   });
 
   const githubMutation = useMutation({
-    mutationFn: () => createGithubRepository({ organizationId: organizationId ?? "", url: githubUrl }),
-    onSuccess: async (result) => {
+    mutationFn: () =>
+      createGithubRepository({
+        organizationId: organizationId ?? "",
+        url: githubUrl,
+      }),
+    onSuccess: (result) => {
       setGithubUrl("");
-      await queryClient.invalidateQueries({ queryKey: ["repositories", organizationId] });
-      navigate(`/repositories/${result.repository.id}`);
+
+      void queryClient.invalidateQueries({
+        queryKey: ["repositories", organizationId],
+      });
+
+      void navigate(`/repositories/${result.repository.id}`);
     },
   });
 
@@ -50,38 +58,52 @@ export function RepositoriesPage(): React.JSX.Element {
         organizationId: organizationId ?? "",
         url: websiteUrl,
       }),
-    onSuccess: async (result) => {
+    onSuccess: (result) => {
       setWebsiteUrl("");
       setWebsiteAuthorizationConfirmed(false);
-      await queryClient.invalidateQueries({ queryKey: ["repositories", organizationId] });
-      navigate(`/repositories/${result.repository.id}`);
+
+      void queryClient.invalidateQueries({
+        queryKey: ["repositories", organizationId],
+      });
+
+      void navigate(`/repositories/${result.repository.id}`);
     },
   });
 
   const zipMutation = useMutation({
     mutationFn: (archive: File) =>
-      createZipRepository({ archive, organizationId: organizationId ?? "" }),
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ["repositories", organizationId] });
-      navigate(`/repositories/${result.repository.id}`);
+      createZipRepository({
+        archive,
+        organizationId: organizationId ?? "",
+      }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["repositories", organizationId],
+      });
+
+      void navigate(`/repositories/${result.repository.id}`);
     },
   });
 
   const folderMutation = useMutation({
     mutationFn: () =>
       createFolderRepository({
-        displayName:
-          Array.from(folderFiles ?? [])
-            .at(0)
-            ?.webkitRelativePath?.split("/")
-            .at(0) || "folder-upload",
+       displayName:
+        Array.from(folderFiles ?? [])
+          .at(0)
+          ?.webkitRelativePath.split("/")
+          .at(0) || "folder-upload",
         files: Array.from(folderFiles ?? []),
         organizationId: organizationId ?? "",
       }),
-    onSuccess: async (result) => {
+    onSuccess: (result) => {
       setFolderFiles(null);
-      await queryClient.invalidateQueries({ queryKey: ["repositories", organizationId] });
-      navigate(`/repositories/${result.repository.id}`);
+
+      void queryClient.invalidateQueries({
+        queryKey: ["repositories", organizationId],
+      });
+
+      void navigate(`/repositories/${result.repository.id}`);
     },
   });
 

@@ -754,7 +754,7 @@ function extractNavigableLinks(
   let externalCount = 0;
   let targetBlankWithoutNoopener = 0;
   for (const tag of html.matchAll(/<a\b[^>]*>/gi)) {
-    const attributes = parseTagAttributes(tag[0] ?? "");
+    const attributes = parseTagAttributes(tag[0]);
     if (!attributes.href) continue;
     const resolved = resolveUrl(baseUrl, attributes.href);
     if (!resolved) continue;
@@ -781,7 +781,7 @@ function extractResourceReferences(
 ): ResourceReference[] {
   const resources: ResourceReference[] = [];
   for (const tag of html.matchAll(/<script\b[^>]*>/gi)) {
-    const attributes = parseTagAttributes(tag[0] ?? "");
+    const attributes = parseTagAttributes(tag[0]);
     const url = attributes.src ? resolveUrl(baseUrl, attributes.src) : undefined;
     if (url) {
       resources.push({
@@ -793,7 +793,7 @@ function extractResourceReferences(
     }
   }
   for (const tag of html.matchAll(/<link\b[^>]*>/gi)) {
-    const attributes = parseTagAttributes(tag[0] ?? "");
+    const attributes = parseTagAttributes(tag[0]);
     if (!/\bstylesheet\b/i.test(attributes.rel ?? "") || !attributes.href) continue;
     const url = resolveUrl(baseUrl, attributes.href);
     if (url) {
@@ -814,7 +814,7 @@ function extractForms(html: string, baseUrl: string): FormProfile[] {
     const attributes = parseTagAttributes(match[1] ?? "");
     const inputs = [...(match[2] ?? "").matchAll(/<(?:input|textarea|select)\b[^>]*>/gi)];
     const inputTypes = inputs.map(
-      (input) => parseTagAttributes(input[0] ?? "").type?.toLowerCase() ?? "text",
+      (input) => parseTagAttributes(input[0]).type?.toLowerCase() ?? "text",
     );
     forms.push({
       action: canonicalizeUrl(resolveUrl(baseUrl, attributes.action ?? "") ?? baseUrl),

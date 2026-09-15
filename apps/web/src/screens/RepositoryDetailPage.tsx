@@ -39,6 +39,7 @@ type WebsiteCrawlSummary = {
   endpoints?: Array<{ url?: string }>;
 };
 
+
 export function RepositoryDetailPage(): React.JSX.Element {
   const { repositoryId = "" } = useParams();
   const { me } = useOutletContext<ShellContext>();
@@ -132,8 +133,8 @@ export function RepositoryDetailPage(): React.JSX.Element {
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteRepository(repositoryId),
-    onSuccess: async () => {
-      navigate("/");
+    onSuccess: () => {
+      void navigate("/");
     },
   });
 
@@ -163,11 +164,14 @@ export function RepositoryDetailPage(): React.JSX.Element {
             ? graphQuery.error.message
             : undefined;
 
-  const languages = Array.isArray(ingestionJob?.result?.languages)
-    ? (ingestionJob?.result?.languages as string[])
+  const ingestionResult = ingestionJob?.result;
+
+  const languages = Array.isArray(ingestionResult?.languages)
+    ? (ingestionResult.languages as string[])
     : [];
-  const technologies = Array.isArray(ingestionJob?.result?.technologies)
-    ? (ingestionJob?.result?.technologies as string[])
+
+  const technologies = Array.isArray(ingestionResult?.technologies)
+    ? (ingestionResult.technologies as string[])
     : [];
   const sourceType = repositoryQuery.data?.sourceType;
   const isWebsite = sourceType === "WEBSITE";
@@ -532,7 +536,7 @@ export function RepositoryDetailPage(): React.JSX.Element {
         )}
       </section>
 
-      <RepositoryChatPanel enabled={Boolean(chatEnabled)} repositoryId={repositoryId} />
+      <RepositoryChatPanel enabled={chatEnabled} repositoryId={repositoryId} />
 
       <section className="overflow-hidden rounded-md border border-slate-800 bg-panel">
         <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3 text-sm font-medium text-white">

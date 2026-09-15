@@ -73,19 +73,27 @@ function parseBriefingMarkdown(markdown: string): ParsedSection[] {
 
   for (const line of lines) {
     const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+
     if (headingMatch) {
       if (currentSection) {
         currentSection.content = currentContent.join("\n").trim();
         currentSection.bullets = currentContent
           .filter((l) => l.startsWith("- ") || l.startsWith("* "))
           .map((l) => l.replace(/^[-*]\s+/, "").trim());
+
         sections.push(currentSection);
       }
 
-      const headingText = headingMatch[2]!.trim();
+      const headingText = headingMatch[2];
+
+      if (typeof headingText !== "string") {
+        continue;
+      }
+
       const severity = detectSeverity(headingText);
 
       let sectionType: SectionType = "summary";
+
       for (const [type, pattern] of Object.entries(SECTION_PATTERNS)) {
         if (pattern.test(headingText)) {
           sectionType = type as SectionType;
@@ -98,6 +106,7 @@ function parseBriefingMarkdown(markdown: string): ParsedSection[] {
         headingText.replace(/\*\*/g, "").trim(),
         severity,
       );
+
       currentContent = [];
     } else if (currentSection && line.trim()) {
       currentContent.push(line);
@@ -160,12 +169,12 @@ export function ThreatBriefingCards({
   return (
     <div className={cn("space-y-4", className)}>
       {sections.map((section, index) => {
-        const variant = CARD_VARIANTS[section.type] || CARD_VARIANTS.summary;
+        const variant = CARD_VARIANTS[section.type];
         const Icon = variant.icon;
 
         const severityConfig = section.severity
-          ? (SEVERITY_CONFIG[section.severity] ?? DEFAULT_CONFIG)
-          : (VARIANT_CONFIG[variant.color] ?? DEFAULT_CONFIG);
+          ? SEVERITY_CONFIG[section.severity]
+          : VARIANT_CONFIG[variant.color] ?? DEFAULT_CONFIG;
 
         return (
           <motion.div

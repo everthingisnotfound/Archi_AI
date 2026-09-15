@@ -9,6 +9,7 @@ export async function copyFolderStaging(
   targetDirectory: string,
   _config: WorkerConfig,
 ): Promise<void> {
+  void _config;
   const stagingDirectory = folderStagingDirectory(workspaceRoot, sourceId);
   await mkdir(targetDirectory, { recursive: true });
   await cp(stagingDirectory, targetDirectory, { force: true, recursive: true });

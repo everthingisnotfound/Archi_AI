@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Iterable
 from urllib.parse import urlparse
 
@@ -27,6 +28,8 @@ from .active_models import (
     ResponseDifference,
 )
 from .active_transport import ActiveTransport
+
+logger = logging.getLogger(__name__)
 
 PROBES = tuple(probe for probe in ProbeKind if probe is not ProbeKind.BASELINE)
 _SAFE_METHODS = {"GET", "HEAD"}
@@ -53,12 +56,16 @@ def response_difference(baseline: ActiveResponse, probe: ActiveResponse) -> Resp
 
 
 def _in_scope(endpoint: ActiveEndpoint, allowed_hosts: set[str]) -> bool:
-    host = (urlparse(str(endpoint.url)).hostname or "").lower().rstrip(".")
-    return any(
-        host == allowed.removeprefix("*.")
-        or (allowed.startswith("*.") and host.endswith("." + allowed[2:]))
-        for allowed in allowed_hosts
-    )
+    try:
+        host = (urlparse(str(endpoint.url)).hostname or "").lower().rstrip(".")
+        return any(
+            host == allowed.removeprefix("*.")
+            or (allowed.startswith("*.") and host.endswith("." + allowed[2:]))
+            for allowed in allowed_hosts
+        )
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Failed to parse endpoint URL {endpoint.url}: {e}")
+        return False
 
 
 class ActiveAssessmentEngine:
@@ -66,6 +73,18 @@ class ActiveAssessmentEngine:
         self.transport = transport
 
     async def assess(self, request: ActiveAssessmentRequest) -> ActiveAssessmentResponse:
+        # Validate request
+        if not request.endpoints:
+            return ActiveAssessmentResponse(findings=[], requests_made=0, skipped_endpoints=[])
+        
+        if not request.allowed_hosts:
+            logger.error("No allowed_hosts specified in active assessment request")
+            return ActiveAssessmentResponse(
+                findings=[],
+                requests_made=0,
+                skipped_endpoints=[str(e.url) for e in request.endpoints],
+            )
+
         endpoints = [
             endpoint
             for endpoint in request.endpoints
@@ -104,7 +123,13 @@ class ActiveAssessmentEngine:
                     diff = response_difference(baseline, response)
                     findings.extend(_findings(endpoint, probe, diff))
                 return findings
-            except (TimeoutError, _BudgetExhausted, httpx.HTTPError, OSError, ValueError):
+            except asyncio.CancelledError:
+                return []
+            except (TimeoutError, _BudgetExhausted, httpx.HTTPError, OSError, ValueError) as e:
+                logger.debug(f"Probe failed for {endpoint.url}: {type(e).__name__}: {e}")
+                return []
+            except Exception as e:
+                logger.warning(f"Unexpected error in active assessment for {endpoint.url}: {e}")
                 return []
 
         tasks = [asyncio.create_task(one(endpoint)) for endpoint in endpoints]
@@ -114,6 +139,7 @@ class ActiveAssessmentEngine:
                 timeout=budget.max_duration_seconds,
             )
         except TimeoutError:
+            logger.info("Active assessment reached duration budget limit")
             for task in tasks:
                 if not task.done():
                     task.cancel()

@@ -1,0 +1,42 @@
+{
+  "name": "Archi AI",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "user": "ubuntu",
+  "install": "bash .cursor/scripts/install.sh",
+  "start": "bash .cursor/scripts/infra-up.sh",
+  "terminals": [
+    {
+      "name": "ai",
+      "command": "bash .cursor/scripts/run-ai.sh"
+    },
+    {
+      "name": "api",
+      "command": "bash .cursor/scripts/run-api.sh"
+    },
+    {
+      "name": "worker",
+      "command": "bash .cursor/scripts/run-worker.sh"
+    },
+    {
+      "name": "web",
+      "command": "bash .cursor/scripts/run-web.sh"
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 5173
+    },
+    {
+      "name": "api",
+      "port": 4000
+    },
+    {
+      "name": "nginx",
+      "port": 8080
+    }
+  ]
+}

@@ -53,6 +53,7 @@ export async function embedTexts(config: ApiConfig, texts: string[]): Promise<nu
         "Content-Type": "application/json",
       },
       method: "POST",
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
@@ -92,6 +93,7 @@ export async function completeChat(
         "Content-Type": "application/json",
       },
       method: "POST",
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {

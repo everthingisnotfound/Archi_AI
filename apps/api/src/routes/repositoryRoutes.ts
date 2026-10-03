@@ -863,6 +863,19 @@ export function createRepositoryRouter(
       );
 
       await prisma.$transaction(async (transaction) => {
+        // Delete chat messages first (depends on chatSession)
+        await transaction.chatMessage.deleteMany({
+          where: { session: { repositoryId: repository.id } },
+        });
+        // Then delete chat sessions (depends on repository)
+        await transaction.chatSession.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        // Then delete code chunks (depends on repository)
+        await transaction.codeChunk.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        // Rest of deletions in dependency order
         await transaction.analysisRun.deleteMany({
           where: { repositoryId: repository.id },
         });
@@ -938,6 +951,19 @@ export function createRepositoryRouter(
       }
 
       await prisma.$transaction(async (transaction) => {
+        // Delete chat messages first (depends on chatSession)
+        await transaction.chatMessage.deleteMany({
+          where: { session: { repositoryId: repository.id } },
+        });
+        // Then delete chat sessions (depends on repository)
+        await transaction.chatSession.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        // Then delete code chunks (depends on repository)
+        await transaction.codeChunk.deleteMany({
+          where: { repositoryId: repository.id },
+        });
+        // Rest of deletions in dependency order
         await transaction.analysisRun.deleteMany({
           where: { repositoryId: repository.id },
         });
